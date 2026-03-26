@@ -413,6 +413,9 @@ tbody tr:hover { background: var(--bg); }
         <button class="nav-item" onclick="navigate('prodotti')" data-page="prodotti">
           <span class="icon">📦</span> Prodotti
         </button>
+        <button class="nav-item" onclick="navigate('categorie')" data-page="categorie" style="padding-left:28px;font-size:0.82rem;opacity:0.85">
+          <span class="icon">🏷️</span> Categorie & Materiali
+        </button>
         <button class="nav-item" onclick="navigate('clienti')" data-page="clienti">
           <span class="icon">👥</span> Clienti
         </button>
@@ -544,10 +547,10 @@ function navigate(page) {
   document.querySelectorAll('.bottom-nav-item').forEach(el => {
     el.classList.toggle('active', el.dataset.bnav === page);
   });
-  const titles = { dashboard: 'Dashboard', preventivi: 'Preventivi', prodotti: 'Catalogo Prodotti', clienti: 'Clienti', impostazioni: 'Impostazioni' };
+  const titles = { dashboard: 'Dashboard', preventivi: 'Preventivi', prodotti: 'Catalogo Prodotti', clienti: 'Clienti', impostazioni: 'Impostazioni', categorie: 'Categorie & Materiali' };
   document.getElementById('page-title').textContent = titles[page] || page;
   closeSidebar();
-  const renderers = { dashboard: renderDashboard, preventivi: renderPreventivi, prodotti: renderProdotti, clienti: renderClienti, impostazioni: renderImpostazioni };
+  const renderers = { dashboard: renderDashboard, preventivi: renderPreventivi, prodotti: renderProdotti, clienti: renderClienti, impostazioni: renderImpostazioni, categorie: renderCategoriePage };
   if (renderers[page]) renderers[page]();
 }
 
@@ -773,6 +776,85 @@ function removeMat(i){materialiList.splice(i,1);refreshMatTags();}
 async function saveCatMatAndClose(){await saveCatMat();closeModal();toast("Categorie e materiali salvati!","success");}
 
 // ════════════════════════════════════════════
+//  PAGINA CATEGORIE & MATERIALI
+// ════════════════════════════════════════════
+function renderCategoriePage() {
+  document.getElementById('topbar-actions').innerHTML = `
+    <button class="btn btn-primary" onclick="saveCatMatFromPage()">💾 Salva modifiche</button>`;
+
+  document.getElementById('page-content').innerHTML = `
+  <div style="display:grid;grid-template-columns:1fr 1fr;gap:24px">
+
+    <div class="card">
+      <h3 style="font-size:1.1rem;margin-bottom:6px">🏷️ Categorie prodotto</h3>
+      <p style="color:var(--text3);font-size:0.82rem;margin-bottom:16px">Appaiono nel selettore categoria quando crei o modifichi un prodotto.</p>
+      <div id="cat-page-tags" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;min-height:32px"></div>
+      <div style="display:flex;gap:8px">
+        <input class="form-input" id="cat-page-input" placeholder="Nuova categoria..." style="flex:1"
+          onkeydown="if(event.key==='Enter'){addCatPage();event.preventDefault()}">
+        <button class="btn btn-primary" onclick="addCatPage()">+ Aggiungi</button>
+      </div>
+    </div>
+
+    <div class="card">
+      <h3 style="font-size:1.1rem;margin-bottom:6px">🔩 Materiali</h3>
+      <p style="color:var(--text3);font-size:0.82rem;margin-bottom:16px">Appaiono nel selettore materiale del prodotto.</p>
+      <div id="mat-page-tags" style="display:flex;flex-wrap:wrap;gap:8px;margin-bottom:16px;min-height:32px"></div>
+      <div style="display:flex;gap:8px">
+        <input class="form-input" id="mat-page-input" placeholder="Nuovo materiale..." style="flex:1"
+          onkeydown="if(event.key==='Enter'){addMatPage();event.preventDefault()}">
+        <button class="btn btn-primary" onclick="addMatPage()">+ Aggiungi</button>
+      </div>
+    </div>
+
+  </div>`;
+
+  renderCatPageTags();
+  renderMatPageTags();
+}
+
+function renderCatPageTags() {
+  const el = document.getElementById('cat-page-tags');
+  if (!el) return;
+  el.innerHTML = categorieList.length ? categorieList.map((c,i) => `
+    <span style="display:inline-flex;align-items:center;gap:6px;background:var(--gold-light);color:var(--gold-dark);border-radius:20px;padding:5px 12px;font-size:0.82rem;font-weight:600">
+      ${c}
+      <button onclick="removeCatPage(${i})" style="background:none;border:none;cursor:pointer;color:var(--gold-dark);font-size:1rem;line-height:1;padding:0;opacity:0.7" title="Rimuovi">×</button>
+    </span>`).join('') : `<span style="color:var(--text3);font-size:0.85rem">Nessuna categoria — aggiungine una</span>`;
+}
+
+function renderMatPageTags() {
+  const el = document.getElementById('mat-page-tags');
+  if (!el) return;
+  el.innerHTML = materialiList.length ? materialiList.map((m,i) => `
+    <span style="display:inline-flex;align-items:center;gap:6px;background:var(--surface2);color:var(--text);border-radius:20px;padding:5px 12px;font-size:0.82rem;font-weight:600;border:1px solid var(--border)">
+      ${m}
+      <button onclick="removeMatPage(${i})" style="background:none;border:none;cursor:pointer;color:var(--text2);font-size:1rem;line-height:1;padding:0;opacity:0.7" title="Rimuovi">×</button>
+    </span>`).join('') : `<span style="color:var(--text3);font-size:0.85rem">Nessun materiale — aggiungine uno</span>`;
+}
+
+function addCatPage() {
+  const inp = document.getElementById('cat-page-input');
+  const v = inp?.value.trim();
+  if (v && !categorieList.includes(v)) { categorieList.push(v); inp.value = ''; renderCatPageTags(); }
+  else if (v) toast('Categoria già presente', 'info');
+}
+function removeCatPage(i) { categorieList.splice(i,1); renderCatPageTags(); }
+
+function addMatPage() {
+  const inp = document.getElementById('mat-page-input');
+  const v = inp?.value.trim();
+  if (v && !materialiList.includes(v)) { materialiList.push(v); inp.value = ''; renderMatPageTags(); }
+  else if (v) toast('Materiale già presente', 'info');
+}
+function removeMatPage(i) { materialiList.splice(i,1); renderMatPageTags(); }
+
+async function saveCatMatFromPage() {
+  await saveCatMat();
+  toast('Categorie e materiali salvati!', 'success');
+}
+
+// ════════════════════════════════════════════
 //  PRODOTTI
 // ════════════════════════════════════════════
 let prodotti = [];
@@ -784,9 +866,6 @@ async function loadProdotti() {
 
 function renderProdotti() {
   document.getElementById('topbar-actions').innerHTML = `
-    <button class="btn btn-secondary" onclick="openCatMatModal()" style="gap:6px">
-      ⚙️ <span class="btn-text">Categorie/Materiali</span>
-    </button>
     <button class="btn btn-primary" onclick="openProdottoModal()">
       <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
       <span class="btn-text">Nuovo Prodotto</span>
@@ -879,15 +958,37 @@ function openProdottoModal(id = null, fromPicker = false) {
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Categoria *</label>
-          <select class="form-select" id="p-cat">
-            ${categorieList.map(c => `<option value="${c}" ${p.categoria===c?'selected':''}>${c}</option>`).join('')}
-          </select>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select class="form-select" id="p-cat" style="flex:1">
+              ${categorieList.map(c => `<option value="${c}" ${p.categoria===c?'selected':''}>${c}</option>`).join('')}
+            </select>
+            <button type="button" class="btn btn-secondary btn-sm" style="white-space:nowrap;padding:8px 10px" onclick="addCatAlVolo()" title="Aggiungi nuova categoria">+ Cat.</button>
+          </div>
+          <div id="nuova-cat-inline" style="display:none;margin-top:6px;display:none">
+            <div style="display:flex;gap:6px">
+              <input class="form-input" id="nuova-cat-val" placeholder="Nome nuova categoria..." style="flex:1;font-size:0.85rem"
+                onkeydown="if(event.key==='Enter'){confermaCatAlVolo();event.preventDefault()}">
+              <button class="btn btn-primary btn-sm" onclick="confermaCatAlVolo()">✓</button>
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('nuova-cat-inline').style.display='none'">✕</button>
+            </div>
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">Materiale</label>
-          <select class="form-select" id="p-mat">
-            ${materialiList.map(m => `<option value="${m}" ${p.materiale===m?'selected':''}>${m}</option>`).join('')}
-          </select>
+          <div style="display:flex;gap:6px;align-items:center">
+            <select class="form-select" id="p-mat" style="flex:1">
+              ${materialiList.map(m => `<option value="${m}" ${p.materiale===m?'selected':''}>${m}</option>`).join('')}
+            </select>
+            <button type="button" class="btn btn-secondary btn-sm" style="white-space:nowrap;padding:8px 10px" onclick="addMatAlVolo()" title="Aggiungi nuovo materiale">+ Mat.</button>
+          </div>
+          <div id="nuova-mat-inline" style="display:none">
+            <div style="display:flex;gap:6px;margin-top:6px">
+              <input class="form-input" id="nuova-mat-val" placeholder="Nome nuovo materiale..." style="flex:1;font-size:0.85rem"
+                onkeydown="if(event.key==='Enter'){confermaMatAlVolo();event.preventDefault()}">
+              <button class="btn btn-primary btn-sm" onclick="confermaMatAlVolo()">✓</button>
+              <button class="btn btn-ghost btn-sm" onclick="document.getElementById('nuova-mat-inline').style.display='none'">✕</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="form-row">
@@ -947,6 +1048,56 @@ function openProdottoModal(id = null, fromPicker = false) {
     </div>`);
 }
 
+
+// ── Aggiungi categoria/materiale al volo dal modal prodotto ──
+function addCatAlVolo() {
+  const box = document.getElementById('nuova-cat-inline');
+  if (box) { box.style.display = box.style.display === 'none' ? 'block' : 'none'; }
+  setTimeout(() => document.getElementById('nuova-cat-val')?.focus(), 50);
+}
+async function confermaCatAlVolo() {
+  const inp = document.getElementById('nuova-cat-val');
+  const v = inp?.value.trim();
+  if (!v) { toast('Inserisci il nome della categoria', 'error'); return; }
+  if (categorieList.includes(v)) { toast('Categoria già presente', 'info'); return; }
+  categorieList.push(v);
+  await saveCatMat();
+  // aggiorna il select
+  const sel = document.getElementById('p-cat');
+  if (sel) {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v; opt.selected = true;
+    sel.appendChild(opt);
+  }
+  if (inp) inp.value = '';
+  const box = document.getElementById('nuova-cat-inline');
+  if (box) box.style.display = 'none';
+  toast(`Categoria "${v}" aggiunta!`, 'success');
+}
+
+function addMatAlVolo() {
+  const box = document.getElementById('nuova-mat-inline');
+  if (box) { box.style.display = box.style.display === 'none' ? 'block' : 'none'; }
+  setTimeout(() => document.getElementById('nuova-mat-val')?.focus(), 50);
+}
+async function confermaMatAlVolo() {
+  const inp = document.getElementById('nuova-mat-val');
+  const v = inp?.value.trim();
+  if (!v) { toast('Inserisci il nome del materiale', 'error'); return; }
+  if (materialiList.includes(v)) { toast('Materiale già presente', 'info'); return; }
+  materialiList.push(v);
+  await saveCatMat();
+  const sel = document.getElementById('p-mat');
+  if (sel) {
+    const opt = document.createElement('option');
+    opt.value = v; opt.textContent = v; opt.selected = true;
+    sel.appendChild(opt);
+  }
+  if (inp) inp.value = '';
+  const box = document.getElementById('nuova-mat-inline');
+  if (box) box.style.display = 'none';
+  toast(`Materiale "${v}" aggiunto!`, 'success');
+}
 
 function handleProdFoto(e) {
   const file = e.target.files[0];
