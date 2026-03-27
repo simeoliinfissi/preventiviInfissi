@@ -2,8 +2,38 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>InfissiPro — Gestione Preventivi</title>
+
+<!-- PWA / Home screen icon -->
+<meta name="application-name" content="InfissiPro">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="InfissiPro">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="theme-color" content="#2D2B27">
+<meta name="msapplication-TileColor" content="#2D2B27">
+
+<!-- Icona per iOS (Apple Touch Icon) -->
+<link rel="apple-touch-icon" href="icon.svg">
+<link rel="apple-touch-icon" sizes="180x180" href="icon.svg">
+<link rel="apple-touch-icon" sizes="152x152" href="icon.svg">
+<link rel="apple-touch-icon" sizes="120x120" href="icon.svg">
+
+<!-- Icona standard -->
+<link rel="icon" type="image/svg+xml" href="icon.svg">
+
+<!-- Manifest PWA (inline via script) -->
+<script>
+(function(){
+  const manifest = '{\n  "name": "InfissiPro",\n  "short_name": "InfissiPro",\n  "description": "Gestione preventivi per infissi",\n  "start_url": "./",\n  "display": "standalone",\n  "background_color": "#2D2B27",\n  "theme_color": "#2D2B27",\n  "orientation": "any",\n  "icons": [\n    {"src": "data:image/svg+xml;base64,PHN2ZyB4bWxucz0iaHR0cDovL3d3dy53My5vcmcvMjAwMC9zdmciIHZpZXdCb3g9IjAgMCA1MTIgNTEyIj4KICA8cmVjdCB3aWR0aD0iNTEyIiBoZWlnaHQ9IjUxMiIgcng9IjEwMCIgZmlsbD0iIzJEMkIyNyIvPgogIDxyZWN0IHg9IjgwIiB5PSIxMDAiIHdpZHRoPSIzNTIiIGhlaWdodD0iMjgwIiByeD0iMTYiIGZpbGw9Im5vbmUiIHN0cm9rZT0iI0M5QTg0QyIgc3Ryb2tlLXdpZHRoPSIyOCIvPgogIDxsaW5lIHgxPSIyNTYiIHkxPSIxMDAiIHgyPSIyNTYiIHkyPSIzODAiIHN0cm9rZT0iI0M5QTg0QyIgc3Ryb2tlLXdpZHRoPSIxOCIvPgogIDxsaW5lIHgxPSI4MCIgeTE9IjI0MCIgeDI9IjQzMiIgeTI9IjI0MCIgc3Ryb2tlPSIjQzlBODRDIiBzdHJva2Utd2lkdGg9IjE4Ii8+CiAgPHJlY3QgeD0iMjA4IiB5PSIyMTUiIHdpZHRoPSIxMiIgaGVpZ2h0PSI1MCIgcng9IjYiIGZpbGw9IiNDOUE4NEMiLz4KICA8cmVjdCB4PSIyOTIiIHk9IjIxNSIgd2lkdGg9IjEyIiBoZWlnaHQ9IjUwIiByeD0iNiIgZmlsbD0iI0M5QTg0QyIvPgogIDx0ZXh0IHg9IjI1NiIgeT0iNDU1IiBmb250LWZhbWlseT0iR2VvcmdpYSxzZXJpZiIgZm9udC1zaXplPSI2OCIgZm9udC13ZWlnaHQ9ImJvbGQiIGZpbGw9IiNDOUE4NEMiIHRleHQtYW5jaG9yPSJtaWRkbGUiPklQPC90ZXh0Pgo8L3N2Zz4=", "sizes": "512x512", "type": "image/svg+xml", "purpose": "any maskable"}\n  ]\n}';
+  const blob = new Blob([manifest], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('link');
+  link.rel = 'manifest'; link.href = url;
+  document.head.appendChild(link);
+})();
+</script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-app-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore-compat.js"></script>
