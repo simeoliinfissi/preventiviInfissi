@@ -391,6 +391,21 @@ tbody tr:hover { background: var(--bg); }
 .sidebar-overlay.open { display: block; }
 
 .chip { display: inline-block; padding: 2px 10px; border-radius: 20px; font-size: 0.75rem; background: var(--gold-light); color: var(--gold-dark); font-weight: 600; }
+.global-search-results {
+  position: absolute; top: 100%; right: 0; width: 360px;
+  background: var(--surface); border: 1px solid var(--border);
+  border-radius: var(--radius); box-shadow: var(--shadow-lg);
+  z-index: 500; max-height: 400px; overflow-y: auto;
+  margin-top: 4px;
+}
+.gsr-section { padding: 8px 14px 4px; font-size: 0.7rem; font-weight: 700; color: var(--text3); text-transform: uppercase; letter-spacing: 1px; }
+.gsr-item { padding: 10px 14px; cursor: pointer; transition: var(--transition); display: flex; align-items: center; gap: 10px; border-bottom: 1px solid var(--border); }
+.gsr-item:last-child { border-bottom: none; }
+.gsr-item:hover { background: var(--surface2); }
+.gsr-icon { font-size: 1rem; flex-shrink: 0; }
+.gsr-main { font-weight: 600; font-size: 0.88rem; }
+.gsr-sub { color: var(--text3); font-size: 0.75rem; }
+#global-search-box { position: relative; }
 .stato-select { border: 1px solid transparent; border-radius: 6px; padding: 3px 6px; font-weight: 600; cursor: pointer; transition: var(--transition); outline: none; }
 .stato-select:hover { border-color: var(--border); }
 .stato-select:focus { border-color: var(--gold); box-shadow: 0 0 0 2px rgba(201,168,76,0.15); }
@@ -474,6 +489,18 @@ tbody tr:hover { background: var(--bg); }
           <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="3" y1="6" x2="21" y2="6"/><line x1="3" y1="12" x2="21" y2="12"/><line x1="3" y1="18" x2="21" y2="18"/></svg>
         </button>
         <h1 class="topbar-title" id="page-title">Dashboard</h1>
+      </div>
+      <div style="display:flex;align-items:center;gap:10px">
+        <div class="search-box" id="global-search-box" style="display:none">
+          <span class="search-icon">🔍</span>
+          <input class="form-input" id="global-search-input" placeholder="Cerca ovunque..." 
+            oninput="globalSearch(this.value)" 
+            style="width:220px;font-size:0.85rem"
+            onblur="setTimeout(()=>hideGlobalSearch(),200)">
+        </div>
+        <button class="btn btn-ghost btn-icon" onclick="toggleGlobalSearch()" title="Ricerca globale" id="global-search-btn" style="color:var(--text2)">
+          <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+        </button>
       </div>
       <div class="topbar-actions" id="topbar-actions"></div>
     </header>
@@ -1419,12 +1446,23 @@ function renderPreventiviTable(list) {
   const icoMail = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z"/><polyline points="22,6 12,13 2,6"/></svg>`;
   const icoStat = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>`;
   const icoDel  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
+  const icoCopy = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
 
   tbody.innerHTML = list.map(p => {
     const cl = clienti.find(c => c.id === p.clienteId);
     const nomeCliente = cl ? `${cl.cognome} ${cl.nome}` : p.clienteNome || '—';
+    // Badge scadenza
+    let scadenzaBadge = '';
+    if (p.validoFino) {
+      const oggi = new Date(); oggi.setHours(0,0,0,0);
+      const scad = new Date(p.validoFino);
+      const diff = Math.round((scad - oggi) / (1000*60*60*24));
+      if (diff < 0) scadenzaBadge = `<br><span style="font-size:0.68rem;color:var(--danger);font-weight:600">⚠ Scaduto</span>`;
+      else if (diff <= 5) scadenzaBadge = `<br><span style="font-size:0.68rem;color:#E67E22;font-weight:600">⏰ Scade in ${diff}gg</span>`;
+    }
+    const numDisplay = p.numeroPrefisso ? `${p.numeroPrefisso}/${p.numero||p.id.slice(-4)}` : `#${p.numero||p.id.slice(-6).toUpperCase()}`;
     return `<tr>
-      <td><strong>#${p.numero||p.id.slice(-6).toUpperCase()}</strong></td>
+      <td><strong>${numDisplay}</strong>${scadenzaBadge}</td>
       <td>${nomeCliente}${cl?.azienda?`<br><small style="color:var(--text3)">${cl.azienda}</small>`:''}</td>
       <td>${fmtDate(p.createdAt)}</td>
       <td><strong>${fmt(p.totaleFinale)}</strong></td>
@@ -1438,6 +1476,7 @@ function renderPreventiviTable(list) {
       </td>
       <td style="text-align:center;white-space:nowrap">
         <button class="btn btn-ghost btn-sm btn-icon" onclick="openPreventivoModal('${p.id}')" title="Modifica preventivo" style="color:var(--info)">${icoEdit}</button>
+        <button class="btn btn-ghost btn-sm btn-icon" onclick="duplicaPreventivo('${p.id}')" title="Duplica preventivo" style="color:var(--text2)">${icoCopy}</button>
         <button class="btn btn-ghost btn-sm btn-icon" onclick="generatePDF('${p.id}')" title="Scarica / Apri PDF" style="color:var(--danger)">${icoPDF}</button>
         <button class="btn btn-ghost btn-sm btn-icon" onclick="sendEmail('${p.id}')" title="Invia email al cliente" style="color:var(--gold-dark)">${icoMail}</button>
         <button class="btn btn-ghost btn-sm btn-icon" onclick="deletePreventivo('${p.id}')" title="Elimina preventivo" style="color:var(--text3)">${icoDel}</button>
@@ -1500,6 +1539,16 @@ async function openPreventivoModal(id = null, preselClienteId = null) {
     `<option value="${c.id}" ${(prev?.clienteId||preselClienteId)===c.id?'selected':''}>${c.cognome} ${c.nome}${c.azienda?' — '+c.azienda:''}</option>`
   ).join('');
 
+  // data validità di default = oggi + 30 giorni
+  const defaultValidita = (() => {
+    const d = prev?.validoFino ? new Date(prev.validoFino) : new Date(Date.now() + 30*24*60*60*1000);
+    return d.toISOString().split('T')[0];
+  })();
+
+  // prefisso numero personalizzato
+  const annoCorrente = new Date().getFullYear();
+  const defaultPrefisso = prev?.numeroPrefisso || String(annoCorrente);
+
   openModal(`
     <div class="modal-header">
       <h2 class="modal-title">${id ? 'Modifica Preventivo' : 'Nuovo Preventivo'}</h2>
@@ -1524,9 +1573,29 @@ async function openPreventivoModal(id = null, preselClienteId = null) {
           </select>
         </div>
       </div>
+
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">Prefisso numero</label>
+          <div style="display:flex;gap:6px;align-items:center">
+            <input class="form-input" id="pv-prefisso" value="${defaultPrefisso}" placeholder="Es. 2025" style="width:90px;flex-shrink:0">
+            <span style="color:var(--text3);font-size:0.85rem">/ ${prev?.numero || '<auto>'}</span>
+          </div>
+          <div style="font-size:0.72rem;color:var(--text3);margin-top:4px">Numero sul PDF: ${defaultPrefisso}/${prev?.numero||'XXXX'}</div>
+        </div>
+        <div class="form-group">
+          <label class="form-label">Valido fino al</label>
+          <input class="form-input" id="pv-validita" type="date" value="${defaultValidita}">
+        </div>
+      </div>
+
       <div class="form-group">
-        <label class="form-label">Note preventivo</label>
-        <textarea class="form-textarea" id="pv-note" placeholder="Condizioni particolari, note per il cliente...">${prev?.note||''}</textarea>
+        <label class="form-label">Note per il cliente <span style="font-size:0.72rem;color:var(--text3)">(appaiono nel PDF)</span></label>
+        <textarea class="form-textarea" id="pv-note" placeholder="Condizioni particolari, note per il cliente..." style="min-height:70px">${prev?.note||''}</textarea>
+      </div>
+      <div class="form-group">
+        <label class="form-label">Note interne <span style="font-size:0.72rem;color:var(--text3)">(solo per voi — non nel PDF)</span></label>
+        <textarea class="form-textarea" id="pv-note-interne" placeholder="Memo interni: es. cliente vuole sconto, installazione a maggio..." style="min-height:60px;background:var(--surface2)">${prev?.noteInterne||''}</textarea>
       </div>
 
       <hr class="divider">
@@ -1824,11 +1893,18 @@ async function savePreventivo(id) {
   const totaleFinale = imponibile + ivaAmt;
   const cl = clienti.find(c => c.id === clienteId);
 
+  const prefisso = document.getElementById('pv-prefisso')?.value.trim() || String(new Date().getFullYear());
+  const validoFino = document.getElementById('pv-validita')?.value || null;
+  const noteInterne = document.getElementById('pv-note-interne')?.value || '';
+
   const data = {
     clienteId,
     clienteNome: cl ? `${cl.cognome} ${cl.nome}` : '',
     stato: document.getElementById('pv-stato').value,
     note: document.getElementById('pv-note').value,
+    noteInterne,
+    numeroPrefisso: prefisso,
+    validoFino,
     items: preventivoItems,
     subtotale, scontoAmt, scontoTipo: _prevSconto.tipo, scontoValore: _prevSconto.valore,
     imponibile, ivaAmt, totaleFinale,
@@ -1848,6 +1924,44 @@ async function savePreventivo(id) {
     toast('Preventivo salvato!', 'success');
   }
   closeModal();
+  renderPreventivi();
+}
+
+// ── DUPLICA PREVENTIVO ──
+async function duplicaPreventivo(id) {
+  if (!confirm('Duplicare questo preventivo come nuova bozza?')) return;
+  toast('Duplicazione in corso...', 'info');
+  await Promise.all([loadPreventivi(), loadClienti()]);
+  const orig = preventivi.find(p => p.id === id);
+  if (!orig) { toast('Preventivo non trovato', 'error'); return; }
+
+  const countSnap = await db.collection('preventivi').get();
+  const nuovoNumero = String(countSnap.size + 1).padStart(4, '0');
+
+  const data = {
+    clienteId: orig.clienteId,
+    clienteNome: orig.clienteNome,
+    stato: 'bozza',
+    note: orig.note || '',
+    noteInterne: orig.noteInterne || '',
+    items: JSON.parse(JSON.stringify(orig.items || [])),
+    subtotale: orig.subtotale || 0,
+    scontoAmt: orig.scontoAmt || 0,
+    scontoTipo: orig.scontoTipo || 'nessuno',
+    scontoValore: orig.scontoValore || 0,
+    imponibile: orig.imponibile || 0,
+    ivaAmt: orig.ivaAmt || 0,
+    totaleFinale: orig.totaleFinale || 0,
+    ivaPerc: orig.ivaPerc || 22,
+    numero: nuovoNumero,
+    numeroPrefisso: orig.numeroPrefisso || '',
+    validoFino: null,
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+
+  await db.collection('preventivi').add(data);
+  toast(`Preventivo duplicato come #${nuovoNumero} — Bozza!`, 'success');
   renderPreventivi();
 }
 
@@ -1899,8 +2013,14 @@ async function generatePDF(prevId) {
   doc.setFontSize(10);
   doc.setFont('helvetica', 'normal');
   const rightX = W - M;
-  doc.text(`PREVENTIVO N° ${prev.numero || prevId.slice(-6).toUpperCase()}`, rightX, 18, { align: 'right' });
+  const numPDF = prev.numeroPrefisso ? `${prev.numeroPrefisso}/${prev.numero||prevId.slice(-4)}` : (prev.numero || prevId.slice(-6).toUpperCase());
+  doc.text(`PREVENTIVO N° ${numPDF}`, rightX, 18, { align: 'right' });
   doc.text(`Data: ${fmtDate(prev.createdAt)}`, rightX, 25, { align: 'right' });
+  if (prev.validoFino) {
+    const vd = new Date(prev.validoFino).toLocaleDateString('it-IT');
+    doc.setFontSize(8); doc.setTextColor(201,168,76);
+    doc.text(`Valido fino al: ${vd}`, rightX, 40, { align: 'right' });
+  }
   doc.setTextColor(201, 168, 76);
   const statusLabels = { bozza:'BOZZA', inviato:'INVIATO', accettato:'ACCETTATO', rifiutato:'RIFIUTATO' };
   doc.text(statusLabels[prev.stato||'bozza'], rightX, 34, { align: 'right' });
@@ -2077,6 +2197,7 @@ async function generatePDF(prevId) {
     doc.setFont('helvetica', 'bold'); doc.setFontSize(8); doc.setTextColor(80,75,70);
     doc.text('NOTE:', M, y);
     doc.setFont('helvetica', 'normal');
+    // noteInterne NON vengono incluse nel PDF — solo note cliente e note azienda
     const noteText = [prev.note, companyData.note].filter(Boolean).join(' — ');
     const lines = doc.splitTextToSize(noteText, W-2*M);
     doc.text(lines, M, y+6);
@@ -2253,6 +2374,85 @@ async function renderDashboard() {
       </div>
     </div>
   </div>`;
+}
+
+// ════════════════════════════════════════════
+//  RICERCA GLOBALE
+// ════════════════════════════════════════════
+function toggleGlobalSearch() {
+  const box = document.getElementById('global-search-box');
+  const inp = document.getElementById('global-search-input');
+  if (!box) return;
+  const visible = box.style.display !== 'none';
+  box.style.display = visible ? 'none' : 'flex';
+  if (!visible) { inp?.focus(); }
+  else { hideGlobalSearch(); }
+}
+
+function hideGlobalSearch() {
+  const box = document.getElementById('global-search-box');
+  const res = document.getElementById('global-search-results');
+  if (box) box.style.display = 'none';
+  if (res) res.remove();
+}
+
+async function globalSearch(q) {
+  const old = document.getElementById('global-search-results');
+  if (old) old.remove();
+  if (!q || q.length < 2) return;
+
+  // Carica dati se non presenti
+  if (!clienti.length) await loadClienti();
+  if (!prodotti.length) await loadProdotti();
+  if (!preventivi.length) await loadPreventivi();
+
+  const ql = q.toLowerCase();
+  const results = [];
+
+  // Cerca clienti
+  clienti.filter(c => `${c.cognome} ${c.nome} ${c.azienda||''}`.toLowerCase().includes(ql)).slice(0,3).forEach(c => {
+    results.push({ tipo: 'cliente', icon: '👤', main: `${c.cognome} ${c.nome}`, sub: c.azienda||c.email||'', action: `openClienteModal('${c.id}')` });
+  });
+
+  // Cerca prodotti
+  prodotti.filter(p => `${p.nome} ${p.categoria||''} ${p.materiale||''}`.toLowerCase().includes(ql)).slice(0,3).forEach(p => {
+    results.push({ tipo: 'prodotto', icon: '📦', main: p.nome, sub: `${p.categoria||''} · ${fmt(p.prezzo)}`, action: `openProdottoModal('${p.id}')` });
+  });
+
+  // Cerca preventivi
+  preventivi.filter(p => {
+    const cl = clienti.find(c => c.id === p.clienteId);
+    return `${p.numero||''} ${p.numeroPrefisso||''} ${p.clienteNome||''} ${cl?.cognome||''} ${cl?.nome||''}`.toLowerCase().includes(ql);
+  }).slice(0,3).forEach(p => {
+    const num = p.numeroPrefisso ? `${p.numeroPrefisso}/${p.numero}` : `#${p.numero||p.id.slice(-4)}`;
+    results.push({ tipo: 'preventivo', icon: '📋', main: `${num} — ${p.clienteNome||''}`, sub: `${fmt(p.totaleFinale)} · ${p.stato||'bozza'}`, action: `navigate('preventivi');setTimeout(()=>openPreventivoModal('${p.id}'),300)` });
+  });
+
+  if (!results.length) {
+    const div = document.createElement('div');
+    div.id = 'global-search-results';
+    div.className = 'global-search-results';
+    div.innerHTML = `<div style="padding:16px;text-align:center;color:var(--text3);font-size:0.85rem">Nessun risultato per "${q}"</div>`;
+    document.getElementById('global-search-box').appendChild(div);
+    return;
+  }
+
+  const sections = { cliente: '👤 Clienti', prodotto: '📦 Prodotti', preventivo: '📋 Preventivi' };
+  let html = '';
+  let lastTipo = '';
+  results.forEach(r => {
+    if (r.tipo !== lastTipo) { html += `<div class="gsr-section">${sections[r.tipo]}</div>`; lastTipo = r.tipo; }
+    html += `<div class="gsr-item" onclick="${r.action};hideGlobalSearch()">
+      <span class="gsr-icon">${r.icon}</span>
+      <div><div class="gsr-main">${r.main}</div><div class="gsr-sub">${r.sub}</div></div>
+    </div>`;
+  });
+
+  const div = document.createElement('div');
+  div.id = 'global-search-results';
+  div.className = 'global-search-results';
+  div.innerHTML = html;
+  document.getElementById('global-search-box').appendChild(div);
 }
 
 // ════════════════════════════════════════════
