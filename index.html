@@ -590,7 +590,7 @@ function signOut() {
   if(confirm('Sei sicuro di voler uscire?')) auth.signOut();
 }
 
-auth.onAuthStateChanged(async user => {
+auth.onAuthStateChanged(user => {
   if (user) {
     if (ALLOWED_EMAILS.length > 0 && !ALLOWED_EMAILS.includes(user.email)) {
       auth.signOut();
@@ -606,9 +606,11 @@ auth.onAuthStateChanged(async user => {
     if (user.photoURL) {
       document.getElementById('sidebar-avatar').innerHTML = `<img src="${user.photoURL}" alt="">`;
     }
-    await loadFeatures();
-    navigate('dashboard');
-    if (can('notifiche')) checkNotifiche();
+    // Carica features poi naviga — usa .then() per evitare await in callback non-async
+    loadFeatures().then(() => {
+      navigate('dashboard');
+      if (can('notifiche')) checkNotifiche();
+    });
   } else {
     currentUser = null;
     document.getElementById('auth-screen').style.display = 'flex';
