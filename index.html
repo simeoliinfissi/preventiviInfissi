@@ -590,7 +590,7 @@ function signOut() {
   if(confirm('Sei sicuro di voler uscire?')) auth.signOut();
 }
 
-auth.onAuthStateChanged(user => {
+auth.onAuthStateChanged(async user => {
   if (user) {
     if (ALLOWED_EMAILS.length > 0 && !ALLOWED_EMAILS.includes(user.email)) {
       auth.signOut();
@@ -800,7 +800,7 @@ function renderImpostazioni() {
 
         ${renderToggle('storicoClienti','📋 Storico preventivi per cliente','Mostra tutti i preventivi passati quando apri una scheda cliente')}
         ${renderToggle('firmaDigitale','✍️ Firma digitale','Il cliente firma il preventivo sul telefono con il dito — salvata nel PDF')}
-        ${renderToggle('whatsapp','💬 WhatsApp diretto','Bottone accanto all'email che apre WhatsApp con messaggio pre-compilato')}
+        ${renderToggle('whatsapp','💬 WhatsApp diretto','Bottone accanto all&apos;email che apre WhatsApp con messaggio pre-compilato')}
         ${renderToggle('notifiche','🔔 Notifiche scadenze','Avviso automatico per preventivi in scadenza o rimasti in "inviato" da troppo tempo')}
 
       </div>
@@ -1515,6 +1515,14 @@ function renderPreventivi() {
   });
 }
 
+// ── Helper buttons (evita template literal annidati) ──
+function btnFirma(id) {
+  return '<button class="btn btn-ghost btn-sm btn-icon" onclick="openFirmaModal(\'' + id + '\')" title="Firma digitale" style="color:var(--success)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg></button>';
+}
+function btnWhatsApp(id) {
+  return '<button class="btn btn-ghost btn-sm btn-icon" onclick="sendWhatsApp(\'' + id + '\')" title="Apri WhatsApp" style="color:#25D366"><svg width="15" height="15" viewBox="0 0 24 24" fill="#25D366"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413z"/><path d="M11.956 0C5.354 0 0 5.343 0 11.932c0 2.103.554 4.114 1.606 5.892L.062 24l6.34-1.61A12.04 12.04 0 0 0 11.956 24c6.603 0 11.956-5.343 11.956-11.932C23.912 5.354 18.559 0 11.956 0zm0 21.818a9.87 9.87 0 0 1-5.018-1.367l-.36-.213-3.732.949.979-3.629-.235-.373a9.718 9.718 0 0 1-1.507-5.253c0-5.39 4.42-9.778 9.873-9.778 5.452 0 9.872 4.388 9.872 9.778 0 5.39-4.42 9.886-9.872 9.886z"/></svg></button>';
+}
+
 function renderPreventiviTable(list) {
   const tbody = document.getElementById('preventivi-tbody');
   if (!tbody) return;
@@ -1559,10 +1567,10 @@ function renderPreventiviTable(list) {
       <td style="text-align:center;white-space:nowrap">
         <button class="btn btn-ghost btn-sm btn-icon" onclick="openPreventivoModal('${p.id}')" title="Modifica preventivo" style="color:var(--info)">${icoEdit}</button>
         <button class="btn btn-ghost btn-sm btn-icon" onclick="duplicaPreventivo('${p.id}')" title="Duplica preventivo" style="color:var(--text2)">${icoCopy}</button>
-        ${can('firmaDigitale') ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="openFirmaModal('${p.id}')" title="Firma digitale" style="color:var(--success)"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg></button>` : ''}
+        ${can('firmaDigitale') ? btnFirma(p.id) : ''}
         <button class="btn btn-ghost btn-sm btn-icon" onclick="generatePDF('${p.id}')" title="Scarica / Apri PDF" style="color:var(--danger)">${icoPDF}</button>
         <button class="btn btn-ghost btn-sm btn-icon" onclick="sendEmail('${p.id}')" title="Invia email al cliente" style="color:var(--gold-dark)">${icoMail}</button>
-        ${can('whatsapp') ? `<button class="btn btn-ghost btn-sm btn-icon" onclick="sendWhatsApp('${p.id}')" title="Apri WhatsApp" style="color:#25D366"><svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor"><path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347z"/><path d="M11.956 0C5.354 0 0 5.343 0 11.932c0 2.103.554 4.114 1.606 5.892L.062 24l6.34-1.61A12.04 12.04 0 0 0 11.956 24c6.603 0 11.956-5.343 11.956-11.932C23.912 5.354 18.559 0 11.956 0zm0 21.818a9.87 9.87 0 0 1-5.018-1.367l-.36-.213-3.732.949.979-3.629-.235-.373a9.718 9.718 0 0 1-1.507-5.253c0-5.39 4.42-9.778 9.873-9.778 5.452 0 9.872 4.388 9.872 9.778 0 5.39-4.42 9.886-9.872 9.886z"/></svg></button>` : ''}
+        ${can('whatsapp') ? btnWhatsApp(p.id) : ''}
         <button class="btn btn-ghost btn-sm btn-icon" onclick="deletePreventivo('${p.id}')" title="Elimina preventivo" style="color:var(--text3)">${icoDel}</button>
       </td>
     </tr>`;
