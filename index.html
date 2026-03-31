@@ -560,6 +560,7 @@ let currentUser = null;
 const ADMIN_EMAIL ='deddyno83@gmail.com';
 const ALLOWED_EMAILS = ['deddyno83@gmail.com','gennarosimeoli1@gmail.com','lglsimeoli@gmail.com','simeoliinfissi@gmail.com']; // aggiungi altre mail qui
 
+
 // Permessi default — vengono sovrascritti da Firestore
 let features = {
   storicoClienti:  true,
@@ -1293,7 +1294,7 @@ async function saveProdotto(id, fromPicker = false) {
     // auto-select the new product and re-open picker
     const newProd = prodotti.find(p => p.id === newDocId);
     if (newProd) {
-      preventivoItems.push({ prodottoId: newProd.id, nome: newProd.nome, categoria: newProd.categoria, materiale: newProd.materiale, prezzo: newProd.prezzo, um: newProd.um || 'pz', foto: newProd.foto || null, descrizione: newProd.descrizione || '', qty: 1, larghezza: null, altezza: null, descrizioneRiga: '' });
+      preventivoItems.push({ prodottoId: newProd.id, nome: newProd.nome, categoria: newProd.categoria, materiale: newProd.materiale, prezzo: newProd.prezzo, um: newProd.um || 'pz', foto: newProd.foto || null, descrizione: newProd.descrizione || '', qty: 1, larghezza: null, altezza: null, mqManuale: null, descrizioneRiga: '' });
       renderPreventivoItems();
       toast('Prodotto creato e aggiunto al preventivo!', 'success');
     }
@@ -1652,10 +1653,29 @@ async function openPreventivoModal(id = null, preselClienteId = null) {
       <div class="form-row">
         <div class="form-group">
           <label class="form-label">Cliente *</label>
-          <select class="form-select" id="pv-cliente">
-            <option value="">— Seleziona cliente —</option>
-            ${clienteOptions}
-          </select>
+          <div style="display:flex;gap:6px;align-items:flex-start">
+            <select class="form-select" id="pv-cliente" style="flex:1">
+              <option value="">— Seleziona cliente —</option>
+              ${clienteOptions}
+            </select>
+            <button type="button" class="btn btn-secondary btn-sm" style="white-space:nowrap;padding:9px 10px;flex-shrink:0" onclick="toggleNuovoClienteInline()" title="Crea nuovo cliente al volo">+ Nuovo</button>
+          </div>
+          <div id="nuovo-cliente-inline" style="display:none;margin-top:10px;background:var(--surface2);border:1px solid var(--border);border-radius:8px;padding:12px">
+            <div style="font-size:0.78rem;font-weight:700;color:var(--text2);margin-bottom:10px;text-transform:uppercase;letter-spacing:0.5px">👤 Nuovo cliente rapido</div>
+            <div class="form-row" style="margin-bottom:8px">
+              <div><label class="form-label" style="font-size:0.72rem">Cognome *</label><input class="form-input" id="nc-cognome" placeholder="Rossi" style="font-size:0.85rem"></div>
+              <div><label class="form-label" style="font-size:0.72rem">Nome</label><input class="form-input" id="nc-nome" placeholder="Mario" style="font-size:0.85rem"></div>
+            </div>
+            <div class="form-row" style="margin-bottom:8px">
+              <div><label class="form-label" style="font-size:0.72rem">Telefono</label><input class="form-input" id="nc-tel" placeholder="+39 333 000000" style="font-size:0.85rem"></div>
+              <div><label class="form-label" style="font-size:0.72rem">Email</label><input class="form-input" id="nc-email" placeholder="mario@email.it" type="email" style="font-size:0.85rem"></div>
+            </div>
+            <div style="margin-bottom:8px"><label class="form-label" style="font-size:0.72rem">Indirizzo</label><input class="form-input" id="nc-addr" placeholder="Via Roma 1, 80100 Napoli" style="font-size:0.85rem"></div>
+            <div style="display:flex;gap:8px;justify-content:flex-end">
+              <button class="btn btn-ghost btn-sm" onclick="toggleNuovoClienteInline()">Annulla</button>
+              <button class="btn btn-primary btn-sm" onclick="salvaClienteRapido()">💾 Crea e seleziona</button>
+            </div>
+          </div>
         </div>
         <div class="form-group">
           <label class="form-label">Stato</label>
@@ -1684,8 +1704,18 @@ async function openPreventivoModal(id = null, preselClienteId = null) {
       </div>
 
       <div class="form-group">
-        <label class="form-label">Note per il cliente <span style="font-size:0.72rem;color:var(--text3)">(appaiono nel PDF)</span></label>
-        <textarea class="form-textarea" id="pv-note" placeholder="Condizioni particolari, note per il cliente..." style="min-height:70px">${prev?.note||''}</textarea>
+        <label class="form-label">Testo introduttivo <span style="font-size:0.72rem;color:var(--text3)">(appare nel PDF prima della tabella prodotti)</span></label>
+        <textarea class="form-textarea" id="pv-note" placeholder="Es. RingranziandoLa per la Sua gentile richiesta, Le sottoponiamo la nostra migliore offerta per..." style="min-height:70px">${prev?.note||''}</textarea>
+      </div>
+      <div class="form-row">
+        <div class="form-group">
+          <label class="form-label">⏱ Tempi di consegna <span style="font-size:0.72rem;color:var(--text3)">(PDF)</span></label>
+          <input class="form-input" id="pv-tempi" value="${prev?.tempiConsegna||'45/60 gg. lavorativi dall&apos;accettazione preventivo e pagamento dell&apos;acconto'}" placeholder="Es. 45/60 gg. lavorativi...">
+        </div>
+        <div class="form-group">
+          <label class="form-label">💳 Condizioni di pagamento <span style="font-size:0.72rem;color:var(--text3)">(PDF)</span></label>
+          <textarea class="form-textarea" id="pv-pagamenti" placeholder="Es. Acconto 40% all'accettazione, saldo a lavori ultimati..." style="min-height:60px">${prev?.pagamenti||'Acconto del 40% all&apos;accettazione su emissione fattura&#10;Saldo a lavori ultimati'}</textarea>
+        </div>
       </div>
       <div class="form-group">
         <label class="form-label">Note interne <span style="font-size:0.72rem;color:var(--text3)">(solo per voi — non nel PDF)</span></label>
@@ -1710,13 +1740,21 @@ async function openPreventivoModal(id = null, preselClienteId = null) {
   renderPreventivoItems();
 }
 
+function calcMq(it) {
+  // Se l'utente ha inserito manualmente i m², usa quello
+  if (it.mqManuale !== null && it.mqManuale !== undefined && it.mqManuale > 0) return it.mqManuale;
+  const largM = (parseInt(it.larghezza)||0) / 1000;
+  const altM  = (parseInt(it.altezza)||0)  / 1000;
+  const mqRaw = largM * altM;
+  // Arrotonda al metro quadro superiore (ceil)
+  return Math.ceil(mqRaw * 100) / 100; // arrotonda al centesimo superiore
+  // Per arrotondare all'intero usa: return Math.ceil(mqRaw);
+}
+
 function calcLineTotal(it) {
   const um = it.um || 'pz';
   if (um === 'mq') {
-    // dimensioni in mm → converti in m → calcola m²
-    const largM = (parseInt(it.larghezza)||0) / 1000;
-    const altM  = (parseInt(it.altezza)||0)  / 1000;
-    const mq = largM * altM;
+    const mq = calcMq(it);
     return parseFloat((it.prezzo * mq * (it.qty||1)).toFixed(2));
   } else if (um === 'ml') {
     const lungM = (parseInt(it.larghezza)||0) / 1000;
@@ -1748,24 +1786,39 @@ function renderPreventivoItems() {
     if (um === 'mq') {
       const largMm = parseInt(it.larghezza)||0;
       const altMm  = parseInt(it.altezza)||0;
-      const mq = ((largMm/1000) * (altMm/1000)).toFixed(4);
-      const mqDisp = parseFloat(mq).toFixed(2);
+      const mqRaw = ((largMm/1000) * (altMm/1000));
+      const mqArrot = Math.ceil(mqRaw * 100) / 100;
+      const mqEff = (it.mqManuale !== null && it.mqManuale !== undefined && it.mqManuale > 0) ? it.mqManuale : mqArrot;
+      const hasManualeOverride = (it.mqManuale !== null && it.mqManuale !== undefined && it.mqManuale > 0);
       misureHtml = `
-        <div style="display:flex;gap:8px;margin-top:8px;align-items:center;flex-wrap:wrap">
-          <div style="display:flex;align-items:center;gap:4px">
-            <label style="font-size:0.72rem;color:var(--text2);white-space:nowrap">Larg. (mm)</label>
-            <input class="form-input" type="number" min="0" step="1" style="width:80px;padding:6px 8px;font-size:0.82rem"
-              value="${largMm||''}" placeholder="1300"
-              oninput="updateItemDim(${i},'larghezza',this.value)">
+        <div style="margin-top:8px">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+            <div style="display:flex;align-items:center;gap:4px">
+              <label style="font-size:0.72rem;color:var(--text2);white-space:nowrap">Larg. (mm)</label>
+              <input class="form-input" type="number" min="0" step="1" style="width:80px;padding:6px 8px;font-size:0.82rem"
+                value="${largMm||''}" placeholder="1300"
+                oninput="updateItemDim(${i},'larghezza',this.value)">
+            </div>
+            <span style="color:var(--text3);font-size:0.9rem">×</span>
+            <div style="display:flex;align-items:center;gap:4px">
+              <label style="font-size:0.72rem;color:var(--text2);white-space:nowrap">Alt. (mm)</label>
+              <input class="form-input" type="number" min="0" step="1" style="width:80px;padding:6px 8px;font-size:0.82rem"
+                value="${altMm||''}" placeholder="1500"
+                oninput="updateItemDim(${i},'altezza',this.value)">
+            </div>
+            <span style="font-size:0.75rem;color:var(--text3)">= ${mqRaw.toFixed(2)} m² → arrot. ${mqArrot.toFixed(2)} m²</span>
           </div>
-          <span style="color:var(--text3);font-size:0.9rem">×</span>
-          <div style="display:flex;align-items:center;gap:4px">
-            <label style="font-size:0.72rem;color:var(--text2);white-space:nowrap">Alt. (mm)</label>
-            <input class="form-input" type="number" min="0" step="1" style="width:80px;padding:6px 8px;font-size:0.82rem"
-              value="${altMm||''}" placeholder="1500"
-              oninput="updateItemDim(${i},'altezza',this.value)">
+          <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
+            <label style="font-size:0.72rem;color:var(--text2);white-space:nowrap;font-weight:600">m² da usare:</label>
+            <input class="form-input" type="number" min="0" step="0.01" 
+              id="mq-badge-${i}"
+              style="width:80px;padding:6px 8px;font-size:0.85rem;font-weight:700;background:var(--gold-light);border-color:var(--gold);color:var(--gold-dark);text-align:center"
+              value="${mqEff.toFixed(2)}"
+              oninput="updateItemMqManuale(${i},this.value)"
+              title="Modifica il valore m² — sovrascrive il calcolo automatico">
+            <span style="font-size:0.75rem;color:var(--text3)">${hasManualeOverride ? '✏️ modificato manualmente' : '(arrotondato al superiore)'}</span>
+            ${hasManualeOverride ? `<button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:4px 8px;color:var(--text3)" onclick="resetMqManuale(${i})" title="Ripristina calcolo automatico">↺ auto</button>` : ''}
           </div>
-          <span id="mq-badge-${i}" style="background:var(--gold-light);color:var(--gold-dark);font-size:0.78rem;font-weight:700;padding:4px 10px;border-radius:4px">= ${mqDisp} m²</span>
         </div>`;
     } else if (um === 'ml') {
       const lungMm = parseInt(it.larghezza)||0;
@@ -1823,6 +1876,43 @@ function renderPreventivoItems() {
   updateTotaleBox();
 }
 
+// ── Nuovo cliente rapido dal modal preventivo ──
+function toggleNuovoClienteInline() {
+  const box = document.getElementById('nuovo-cliente-inline');
+  if (box) box.style.display = box.style.display === 'none' ? 'block' : 'none';
+  setTimeout(() => document.getElementById('nc-cognome')?.focus(), 50);
+}
+
+async function salvaClienteRapido() {
+  const cognome = document.getElementById('nc-cognome')?.value.trim();
+  if (!cognome) { toast('Inserisci almeno il cognome', 'error'); return; }
+  const data = {
+    cognome,
+    nome: document.getElementById('nc-nome')?.value || '',
+    telefono: document.getElementById('nc-tel')?.value || '',
+    email: document.getElementById('nc-email')?.value || '',
+    indirizzo: document.getElementById('nc-addr')?.value || '',
+    citta: '', azienda: '', note: '',
+    createdAt: firebase.firestore.FieldValue.serverTimestamp(),
+    updatedAt: firebase.firestore.FieldValue.serverTimestamp()
+  };
+  const ref = await db.collection('clienti').add(data);
+  await loadClienti();
+  // Aggiunge la nuova opzione nel select e la seleziona
+  const sel = document.getElementById('pv-cliente');
+  if (sel) {
+    const opt = document.createElement('option');
+    opt.value = ref.id;
+    opt.textContent = `${cognome} ${data.nome}`.trim();
+    opt.selected = true;
+    sel.appendChild(opt);
+  }
+  // Chiude il pannello
+  const box = document.getElementById('nuovo-cliente-inline');
+  if (box) box.style.display = 'none';
+  toast(`Cliente "${cognome}" creato e selezionato!`, 'success');
+}
+
 function updateScontoTipo(v) { _prevSconto.tipo = v; if(v==='nessuno') _prevSconto.valore=0; renderPreventivoItems(); }
 function updateScontoValore(v) { _prevSconto.valore = parseFloat(v)||0; renderPreventivoItems(); }
 
@@ -1832,20 +1922,29 @@ function updateItemQty(i, v) {
 }
 function updateItemDim(i, campo, v) {
   preventivoItems[i][campo] = parseInt(v) || 0;
-  // Aggiorna solo il badge m² e il totale, senza ricostruire il DOM
+  // Se non c'è override manuale, ricalcola e aggiorna l'input m²
   const um = preventivoItems[i].um || 'pz';
   if (um === 'mq') {
-    const largMm = parseInt(preventivoItems[i].larghezza)||0;
-    const altMm  = parseInt(preventivoItems[i].altezza)||0;
-    const mq = ((largMm/1000) * (altMm/1000)).toFixed(2);
-    const badge = document.getElementById('mq-badge-'+i);
-    if (badge) badge.textContent = '= ' + mq + ' m²';
+    const hasManualeOverride = preventivoItems[i].mqManuale > 0;
+    if (!hasManualeOverride) {
+      const mq = calcMq(preventivoItems[i]);
+      const badge = document.getElementById('mq-badge-'+i);
+      if (badge) badge.value = mq.toFixed(2);
+    }
   } else if (um === 'ml') {
     const lungMm = parseInt(preventivoItems[i].larghezza)||0;
     const badge = document.getElementById('mq-badge-'+i);
-    if (badge) badge.textContent = '= ' + (lungMm/1000).toFixed(2) + ' ml';
+    if (badge) badge.value = (lungMm/1000).toFixed(2);
   }
   refreshItemTotals(i);
+}
+function updateItemMqManuale(i, v) {
+  preventivoItems[i].mqManuale = parseFloat(v) || 0;
+  refreshItemTotals(i);
+}
+function resetMqManuale(i) {
+  preventivoItems[i].mqManuale = null;
+  renderPreventivoItems(); // ricostruisce con calcolo auto
 }
 function updateItemDescRiga(i, v) { preventivoItems[i].descrizioneRiga = v; }
 function removeItem(i) { preventivoItems.splice(i, 1); renderPreventivoItems(); }
@@ -1963,7 +2062,7 @@ function confirmProductPick() {
         sistema: p.sistema || '', coloreProfili: p.coloreProfili || '',
         coloreAccessori: p.coloreAccessori || '', altezzaManiglia: p.altezzaManiglia || null,
         tamponamento: p.tamponamento || '',
-        qty: 1, larghezza: null, altezza: null, descrizioneRiga: ''
+        qty: 1, larghezza: null, altezza: null, mqManuale: null, descrizioneRiga: ''
       });
     }
   });
@@ -1990,6 +2089,8 @@ async function savePreventivo(id) {
   const prefisso = document.getElementById('pv-prefisso')?.value.trim() || String(new Date().getFullYear());
   const validoFino = document.getElementById('pv-validita')?.value || null;
   const noteInterne = document.getElementById('pv-note-interne')?.value || '';
+  const tempiConsegna = document.getElementById('pv-tempi')?.value || '';
+  const pagamenti = document.getElementById('pv-pagamenti')?.value || '';
 
   const data = {
     clienteId,
@@ -1997,6 +2098,8 @@ async function savePreventivo(id) {
     stato: document.getElementById('pv-stato').value,
     note: document.getElementById('pv-note').value,
     noteInterne,
+    tempiConsegna,
+    pagamenti,
     numeroPrefisso: prefisso,
     validoFino,
     items: preventivoItems,
@@ -2193,7 +2296,9 @@ async function generatePDF(prevId) {
     if (um === 'mq') {
       const largMm = parseInt(it.larghezza)||0;
       const altMm  = parseInt(it.altezza)||0;
-      mqVal = (largMm/1000) * (altMm/1000);
+      const mqRaw = (largMm/1000) * (altMm/1000);
+      // Usa mqManuale se impostato, altrimenti arrotonda al centesimo superiore
+      mqVal = (it.mqManuale > 0) ? it.mqManuale : Math.ceil(mqRaw * 100) / 100;
       lineTotal = parseFloat((it.prezzo * mqVal * (it.qty||1)).toFixed(2));
       dimStr = `L ${largMm} x h${altMm} mm`;
       superfStr = `mq ${mqVal.toFixed(2)} x ${fmt(it.prezzo).replace('€','').trim()} €/mq`;
@@ -2349,6 +2454,35 @@ async function generatePDF(prevId) {
     const noteLines = doc.splitTextToSize(companyData.note, W-2*M);
     doc.text(noteLines, M, y+11);
     y += noteLines.length * 4.5 + 14;
+  }
+
+  // ════════════════════════
+  // TEMPI DI CONSEGNA E PAGAMENTI
+  // ════════════════════════
+  if (prev.tempiConsegna || prev.pagamenti) {
+    if (y + 30 > 260) newPage();
+    y += 4;
+    doc.setDrawColor(200,200,200); doc.setLineWidth(0.2);
+    doc.line(M, y, W-M, y); y += 5;
+
+    if (prev.tempiConsegna) {
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(20,20,20);
+      doc.text('Tempi di Consegna:', M, y);
+      doc.setFont('helvetica','normal');
+      const tLines = doc.splitTextToSize(prev.tempiConsegna, W-2*M-5);
+      doc.text(tLines, M, y+5);
+      y += tLines.length * 4.5 + 8;
+    }
+
+    if (prev.pagamenti) {
+      if (y + 20 > 260) newPage();
+      doc.setFont('helvetica','bold'); doc.setFontSize(8); doc.setTextColor(20,20,20);
+      doc.text('Pagamenti:', M, y);
+      doc.setFont('helvetica','normal');
+      const pLines = doc.splitTextToSize(prev.pagamenti, W-2*M-5);
+      doc.text(pLines, M, y+5);
+      y += pLines.length * 4.5 + 8;
+    }
   }
 
   // ════════════════════════
