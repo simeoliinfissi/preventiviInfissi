@@ -2643,38 +2643,54 @@ async function getGmailToken() {
   });
 }
 
-// Costruisce il messaggio MIME con PDF allegato in base64
+// Costruisce il messaggio MIME con PDF allegato
+// Usa Uint8Array per evitare doppia codifica del PDF
 function buildMimeMessage(to, subject, bodyText, pdfBase64, filename) {
   const boundary = 'InfissiPro_' + Date.now();
-  // Rimuove il prefisso data:application/pdf;base64, se presente
-  const pdfData = pdfBase64.replace(/^data:[^;]+;base64,/, '');
 
-  const mime = [
-    `From: ${GMAIL_SENDER}`,
-    `To: ${to}`,
-    `Subject: =?UTF-8?B?${btoa(unescape(encodeURIComponent(subject)))}?=`,
+  // Estrai il base64 puro del PDF (senza prefisso data:...)
+  const pdfB64Pure = pdfBase64.replace(/^data:[^;]+;base64,/, '');
+
+  // Codifica il testo in base64 per la parte testuale
+  const bodyB64 = btoa(unescape(encodeURIComponent(bodyText)));
+
+  // Codifica subject in base64 per supportare caratteri italiani
+  const subjectB64 = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
+
+  // Costruisci le parti del MIME come stringa (il PDF è già in base64 — non va ri-codificato)
+  const mimeParts = [
     'MIME-Version: 1.0',
-    `Content-Type: multipart/mixed; boundary="${boundary}"`,
+    'From: ' + GMAIL_SENDER,
+    'To: ' + to,
+    'Subject: ' + subjectB64,
+    'Content-Type: multipart/mixed; boundary="' + boundary + '"',
     '',
-    `--${boundary}`,
+    '--' + boundary,
     'Content-Type: text/plain; charset=UTF-8',
     'Content-Transfer-Encoding: base64',
     '',
-    btoa(unescape(encodeURIComponent(bodyText))),
+    bodyB64,
     '',
-    `--${boundary}`,
-    `Content-Type: application/pdf; name="${filename}"`,
+    '--' + boundary,
+    'Content-Type: application/pdf; name="' + filename + '"',
     'Content-Transfer-Encoding: base64',
-    `Content-Disposition: attachment; filename="${filename}"`,
+    'Content-Disposition: attachment; filename="' + filename + '"',
     '',
-    pdfData,
+    pdfB64Pure,
     '',
-    `--${boundary}--`
+    '--' + boundary + '--'
   ].join('\r\n');
 
-  // Codifica in base64url (richiesto da Gmail API)
-  return btoa(unescape(encodeURIComponent(mime)))
-    .replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  // Converti in Uint8Array byte per byte (evita problemi con btoa su stringhe grandi)
+  const bytes = new Uint8Array(mimeParts.length);
+  for (let i = 0; i < mimeParts.length; i++) {
+    bytes[i] = mimeParts.charCodeAt(i) & 0xff;
+  }
+
+  // Converti in base64url
+  let binary = '';
+  bytes.forEach(b => binary += String.fromCharCode(b));
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 // Genera il PDF e restituisce il base64
