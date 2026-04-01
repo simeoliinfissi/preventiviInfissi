@@ -2653,7 +2653,7 @@ function buildMimeMessage(to, subject, bodyText, pdfBase64, filename) {
 
   // Estrai base64 puro senza prefisso data:...
 // Estrai base64 puro e rimuovi qualsiasi whitespace residuo
-const pdfB64Pure = pdfBase64.replace(/^data:[^;]+;base64,/, '').replace(/\s/g, '');
+const pdfB64Pure = pdfBase64.split(',').pop().replace(/\s/g, '');
   // Subject con supporto caratteri italiani
   const subjectB64 = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
 
