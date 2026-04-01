@@ -2732,11 +2732,7 @@ async function sendEmail(prevId) {
   const prev = preventivi.find(p => p.id === prevId);
   const cl = clienti.find(c => c.id === prev?.clienteId);
 
-  const toEmail = cl?.email || '';
-  if (!toEmail) {
-   const toEmail = cl?.email || '';
-    return;
-  }
+ const toEmail = cl?.email || '';
 
   // Mostra modal di conferma con anteprima
   const numPDF = prev.numeroPrefisso ? `${prev.numeroPrefisso}/${prev.numero}` : `#${prev.numero||prevId.slice(-4)}`;
