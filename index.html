@@ -2798,7 +2798,10 @@ async function eseguiInvioEmail(prevId, toEmail) {
     window._pdfBase64Result = null;
 
     if (!pdfB64) throw new Error('Generazione PDF fallita');
-
+// DEBUG TEMPORANEO — rimuovi dopo il test
+console.log('PDF base64 length:', pdfB64?.length);
+console.log('PDF inizia con:', pdfB64?.substring(0, 50));
+console.log('PDF puro length:', pdfB64?.replace(/^data:[^;]+;base64,/, '').replace(/\s/g, '').length);
     // 2. Ottieni token Gmail
     if (btn) btn.textContent = '🔐 Autorizzazione Gmail...';
     if (status) status.textContent = '🔐 Richiesta autorizzazione Gmail...';
