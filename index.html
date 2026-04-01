@@ -2576,7 +2576,10 @@ async function generatePDF(prevId) {
 
   // Modalità base64 — usata da eseguiInvioEmail per allegare il PDF
   if (window._pdfOutputMode === 'base64') {
-    window._pdfBase64Result = doc.output('datauristring');
+// Usa output('datauristring') e verifica che sia pulito
+const raw = doc.output('datauristring');
+// Normalizza: rimuovi eventuali spazi/newline nel base64
+window._pdfBase64Result = raw.replace(/\s/g, '');    
     return;
   }
 
@@ -2649,8 +2652,8 @@ function buildMimeMessage(to, subject, bodyText, pdfBase64, filename) {
   const boundary = 'InfissiPro_' + Date.now();
 
   // Estrai base64 puro senza prefisso data:...
-  const pdfB64Pure = pdfBase64.replace(/^data:[^;]+;base64,/, '');
-
+// Estrai base64 puro e rimuovi qualsiasi whitespace residuo
+const pdfB64Pure = pdfBase64.replace(/^data:[^;]+;base64,/, '').replace(/\s/g, '');
   // Subject con supporto caratteri italiani
   const subjectB64 = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
 
