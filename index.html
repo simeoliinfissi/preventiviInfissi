@@ -560,7 +560,6 @@ let currentUser = null;
 const ADMIN_EMAIL ='deddyno83@gmail.com';
 const ALLOWED_EMAILS = ['deddyno83@gmail.com','gennarosimeoli1@gmail.com','lglsimeoli@gmail.com','simeoliinfissi@gmail.com']; // aggiungi altre mail qui
 
-
 // Permessi default — vengono sovrascritti da Firestore
 let features = {
   storicoClienti:  true,
@@ -1791,8 +1790,7 @@ function renderPreventivoItems() {
       const mqEff = (it.mqManuale !== null && it.mqManuale !== undefined && it.mqManuale > 0) ? it.mqManuale : mqArrot;
       const hasManualeOverride = (it.mqManuale !== null && it.mqManuale !== undefined && it.mqManuale > 0);
       misureHtml = `
-        <div style="margin-top:8px">
-          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;padding-top:10px">
             <div style="display:flex;align-items:center;gap:4px">
               <label style="font-size:0.72rem;color:var(--text2);white-space:nowrap">Larg. (mm)</label>
               <input class="form-input" type="number" min="0" step="1" style="width:80px;padding:6px 8px;font-size:0.82rem"
@@ -1806,7 +1804,7 @@ function renderPreventivoItems() {
                 value="${altMm||''}" placeholder="1500"
                 oninput="updateItemDim(${i},'altezza',this.value)">
             </div>
-            <span style="font-size:0.75rem;color:var(--text3)">= ${mqRaw.toFixed(2)} m² → arrot. ${mqArrot.toFixed(2)} m²</span>
+            <span id="mq-info-${i}" style="font-size:0.75rem;color:var(--text3)">= ${mqRaw.toFixed(2)} m² → arrot. ${mqArrot.toFixed(2)} m²</span>
           </div>
           <div style="display:flex;align-items:center;gap:8px;margin-top:6px">
             <label style="font-size:0.72rem;color:var(--text2);white-space:nowrap;font-weight:600">m² da usare:</label>
@@ -1818,8 +1816,7 @@ function renderPreventivoItems() {
               title="Modifica il valore m² — sovrascrive il calcolo automatico">
             <span style="font-size:0.75rem;color:var(--text3)">${hasManualeOverride ? '✏️ modificato manualmente' : '(arrotondato al superiore)'}</span>
             ${hasManualeOverride ? `<button class="btn btn-ghost btn-sm" style="font-size:0.72rem;padding:4px 8px;color:var(--text3)" onclick="resetMqManuale(${i})" title="Ripristina calcolo automatico">↺ auto</button>` : ''}
-          </div>
-        </div>`;
+          </div>`;
     } else if (um === 'ml') {
       const lungMm = parseInt(it.larghezza)||0;
       misureHtml = `
@@ -1844,31 +1841,48 @@ function renderPreventivoItems() {
     const umLabel = um === 'mq' ? 'N. finestre' : um === 'ml' ? 'N. pezzi' : 'Qtà';
     const umStr = um === 'mq' ? 'm²' : um === 'ml' ? 'ml' : 'pz';
 
+    const isCopia = it._copia || false;
     return `
-    <div class="quote-item" style="grid-template-columns:1fr auto auto;gap:10px;align-items:start">
-      <div>
-        <div style="display:flex;align-items:flex-start;gap:10px">
-          ${it.foto ? `<img src="${it.foto}" style="width:52px;height:44px;object-fit:cover;border-radius:6px;flex-shrink:0;border:1px solid var(--border)">` : ''}
-          <div style="flex:1">
-            <div class="quote-item-name">${it.nome}</div>
-            <div class="quote-item-cat">${it.categoria||''} · <strong>${umStr}</strong> · ${fmt(it.prezzo)}/${umStr}</div>
+    <div style="background:var(--surface);border:1px solid ${isCopia ? 'var(--info)' : 'var(--border)'};border-radius:var(--radius);margin-bottom:10px;overflow:hidden">
+
+      <!-- HEADER RIGA -->
+      <div style="display:flex;align-items:flex-start;gap:12px;padding:12px 14px 10px">
+        ${it.foto ? `<img src="${it.foto}" style="width:54px;height:46px;object-fit:cover;border-radius:6px;flex-shrink:0;border:1px solid var(--border)">` : `<div style="width:54px;height:46px;border-radius:6px;background:var(--surface2);flex-shrink:0;display:flex;align-items:center;justify-content:center;font-size:1.4rem">📦</div>`}
+        <div style="flex:1;min-width:0">
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+            <span style="font-weight:600;font-size:0.95rem">${it.nome}</span>
+            ${isCopia ? `<span style="font-size:0.7rem;background:var(--info);color:white;padding:2px 8px;border-radius:20px">copia</span>` : ''}
+          </div>
+          <div style="font-size:0.78rem;color:var(--text2);margin-top:2px">${it.categoria||''} · <strong>${umStr}</strong> · ${fmt(it.prezzo)}/${umStr}</div>
+        </div>
+        <!-- QTÀ + TOTALE + AZIONI -->
+        <div style="display:flex;align-items:flex-start;gap:10px;flex-shrink:0">
+          <div style="text-align:center">
+            <div style="font-size:0.7rem;color:var(--text3);margin-bottom:3px">${umLabel}</div>
+            <input class="form-input" type="number" min="1" value="${it.qty||1}" onchange="updateItemQty(${i},this.value)" style="width:54px;text-align:center;padding:5px 4px;font-size:0.9rem;font-weight:600">
+          </div>
+          <div style="text-align:right;padding-top:2px">
+            <div class="item-total" id="item-total-${i}" style="font-size:1rem;font-weight:700;color:var(--gold-dark);white-space:nowrap">${fmt(lineTotal)}</div>
+            <div style="display:flex;gap:4px;margin-top:6px;justify-content:flex-end">
+              <button class="btn btn-ghost btn-sm" onclick="duplicaRiga(${i})" title="Duplica riga con misure diverse" style="width:28px;height:28px;padding:0;border-radius:50%;border:1px solid var(--info);color:var(--info);font-size:1rem;display:flex;align-items:center;justify-content:center">+</button>
+              <button class="btn btn-danger btn-sm" onclick="removeItem(${i})" style="width:28px;height:28px;padding:0;border-radius:50%;font-size:0.8rem;display:flex;align-items:center;justify-content:center">✕</button>
+            </div>
           </div>
         </div>
-        ${techLines.length ? `
-        <div style="margin-top:8px;background:var(--surface);border:1px solid var(--border);border-radius:6px;padding:8px 10px">
-          ${techLines.map(l => `<div style="font-size:0.75rem;color:var(--text2);line-height:1.6">${l}</div>`).join('')}
-        </div>` : ''}
-        ${misureHtml}
-        <input class="form-input" style="margin-top:8px;font-size:0.8rem" placeholder="Posizione / Vano (es. Camera da letto - finestra sx)" value="${it.descrizioneRiga||''}" oninput="updateItemDescRiga(${i},this.value)">
       </div>
-      <div style="display:flex;flex-direction:column;align-items:center;gap:4px;min-width:64px">
-        <label class="form-label" style="font-size:0.72rem;text-align:center">${umLabel}</label>
-        <input class="qty-input form-input" type="number" min="1" value="${it.qty||1}" onchange="updateItemQty(${i},this.value)" style="width:58px;text-align:center;padding:6px 4px">
-      </div>
-      <div style="display:flex;flex-direction:column;align-items:flex-end;gap:6px;min-width:80px">
-        <div class="item-total" id="item-total-${i}">${fmt(lineTotal)}</div>
-        <button class="btn btn-ghost btn-sm btn-icon" onclick="duplicaRiga(${i})" title="Duplica riga (stesse misure diverse)" style="color:var(--info);font-size:0.9rem">⊕</button>
-        <button class="btn btn-danger btn-sm btn-icon" onclick="removeItem(${i})">✕</button>
+
+      <!-- DETTAGLI TECNICI (griglia 2 col) -->
+      ${techLines.length ? `
+      <div style="margin:0 14px 10px;background:var(--surface2);border-radius:6px;padding:8px 12px;display:grid;grid-template-columns:1fr 1fr;gap:3px 16px">
+        ${techLines.map(l => `<div style="font-size:0.75rem;color:var(--text2);line-height:1.7">${l}</div>`).join('')}
+      </div>` : ''}
+
+      <!-- MISURE -->
+      ${misureHtml ? `<div style="padding:0 14px 10px;border-top:1px solid var(--border)">${misureHtml}</div>` : ''}
+
+      <!-- POSIZIONE / VANO -->
+      <div style="padding:0 14px 12px${misureHtml ? '' : ';border-top:1px solid var(--border);padding-top:10px'}">
+        <input class="form-input" style="font-size:0.82rem;color:var(--text2)" placeholder="Posizione / Vano (es. Camera da letto - finestra sx)" value="${it.descrizioneRiga||''}" oninput="updateItemDescRiga(${i},this.value)">
       </div>
     </div>`;
   }).join('');
@@ -1922,18 +1936,24 @@ function updateItemQty(i, v) {
   refreshItemTotals(i);
 }
 function updateItemDim(i, campo, v) {
-  preventivoItems[i][campo] = parseInt(v) || 0;
-  // Se non c'è override manuale, ricalcola e aggiorna l'input m²
+  const valNum = parseInt(v);
+  preventivoItems[i][campo] = isNaN(valNum) ? 0 : valNum;
   const um = preventivoItems[i].um || 'pz';
   if (um === 'mq') {
     const hasManualeOverride = preventivoItems[i].mqManuale > 0;
     if (!hasManualeOverride) {
-      const mq = calcMq(preventivoItems[i]);
+      const largMm = preventivoItems[i].larghezza || 0;
+      const altMm  = preventivoItems[i].altezza  || 0;
+      const mqRaw  = (largMm / 1000) * (altMm / 1000);
+      const mqArrot = Math.ceil(mqRaw * 2) / 2;
       const badge = document.getElementById('mq-badge-'+i);
-      if (badge) badge.value = mq.toFixed(2);
+      if (badge) badge.value = mqArrot.toFixed(2);
+      // aggiorna anche il testo raw→arrot
+      const info = document.getElementById('mq-info-'+i);
+      if (info) info.textContent = mqRaw.toFixed(2) + ' m² → arrot. ' + mqArrot.toFixed(2) + ' m²';
     }
   } else if (um === 'ml') {
-    const lungMm = parseInt(preventivoItems[i].larghezza)||0;
+    const lungMm = preventivoItems[i].larghezza || 0;
     const badge = document.getElementById('mq-badge-'+i);
     if (badge) badge.value = (lungMm/1000).toFixed(2);
   }
@@ -1948,13 +1968,13 @@ function resetMqManuale(i) {
   renderPreventivoItems(); // ricostruisce con calcolo auto
 }
 function duplicaRiga(i) {
-  // Copia la riga i con misure azzerate per inserirne di nuove
   const orig = preventivoItems[i];
   const copia = JSON.parse(JSON.stringify(orig));
   copia.larghezza = null;
   copia.altezza = null;
   copia.mqManuale = null;
   copia.descrizioneRiga = '';
+  copia._copia = true;
   preventivoItems.splice(i + 1, 0, copia);
   renderPreventivoItems();
   toast('Riga duplicata — inserisci le nuove misure', 'info');
