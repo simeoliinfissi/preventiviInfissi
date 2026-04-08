@@ -2817,11 +2817,11 @@ async function sendEmail(prevId) {
   const prev = preventivi.find(p => p.id === prevId);
   const cl = clienti.find(c => c.id === prev?.clienteId);
 
-  const toEmail = cl?.email || '';
-  if (!toEmail) {
-    toast('Il cliente non ha un&apos;indirizzo email', 'error');
-    return;
-  }
+ const toEmail = cl?.email || '';
+				 
+																
+		   
+   
 
   // Mostra modal di conferma con anteprima
   const numPDF = prev.numeroPrefisso ? `${prev.numeroPrefisso}/${prev.numero}` : `#${prev.numero||prevId.slice(-4)}`;
@@ -2838,7 +2838,10 @@ async function sendEmail(prevId) {
           <span style="color:var(--text3);font-weight:600">Da:</span>
           <span>${GMAIL_SENDER}</span>
           <span style="color:var(--text3);font-weight:600">A:</span>
-          <span style="color:var(--info)">${toEmail}</span>
+          <span style="color:var(--info)">${toEmail 
+  ? `<span style="color:var(--info)">${toEmail}</span>` 
+  : `<input class="form-input" id="email-destinatario" placeholder="Inserisci email cliente..." style="font-size:0.88rem;padding:6px 10px" type="email">`
+}</span>
           <span style="color:var(--text3);font-weight:600">Oggetto:</span>
           <span>Preventivo ${numPDF} – ${companyData.nome||'Simeoli Infissi'}</span>
           <span style="color:var(--text3);font-weight:600">Allegato:</span>
@@ -2861,7 +2864,12 @@ async function sendEmail(prevId) {
 }
 
 async function eseguiInvioEmail(prevId, toEmail) {
-  const btn = document.getElementById('btn-invia-email');
+  // Se email non c'era, prendi quella inserita manualmente
+  const emailInput = document.getElementById('email-destinatario');
+  if (emailInput) {
+    toEmail = emailInput.value.trim();
+    if (!toEmail) { toast('Inserisci un indirizzo email', 'error'); return; }
+  }  const btn = document.getElementById('btn-invia-email');
   const status = document.getElementById('email-status');
   const bodyText = document.getElementById('email-body')?.value || '';
 
@@ -2882,7 +2890,10 @@ async function eseguiInvioEmail(prevId, toEmail) {
     window._pdfBase64Result = null;
 
     if (!pdfB64) throw new Error('Generazione PDF fallita');
-
+// DEBUG TEMPORANEO — rimuovi dopo il test
+console.log('PDF base64 length:', pdfB64?.length);
+console.log('PDF inizia con:', pdfB64?.substring(0, 50));
+console.log('PDF puro length:', pdfB64?.replace(/^data:[^;]+;base64,/, '').replace(/\s/g, '').length);
     // 2. Ottieni token Gmail
     if (btn) btn.textContent = '🔐 Autorizzazione Gmail...';
     if (status) status.textContent = '🔐 Richiesta autorizzazione Gmail...';
