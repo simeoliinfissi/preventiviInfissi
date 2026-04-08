@@ -560,7 +560,7 @@ const db = firebase.firestore();
 let currentUser = null;
 const ADMIN_EMAIL = 'deddyno83@gmail.com';
 
-const ALLOWED_EMAILS = ['deddyno83@gmail.com','gennarosimeoli1@gmail.com','lglsimeoli@gmail.com','simeoliinfissi@gmail.com']; // aggiungi altre mail qui
+const ALLOWED_EMAILS = ['deddyno83@gmail.com','gennarosimeoli1@gmail.com','lglsimeoli@gmail.com']; // aggiungi altre mail qui
 
 // Permessi default — vengono sovrascritti da Firestore
 let features = {
@@ -2666,34 +2666,62 @@ async function generatePDF(prevId) {
   }
 
   const filename = `Preventivo_${prev.numero||prevId.slice(-6).toUpperCase()}.pdf`;
-if (window._pdfOutputMode === 'base64') {
-// Usa output('datauristring') e verifica che sia pulito
-const raw = doc.output('datauristring');
-// Normalizza: rimuovi eventuali spazi/newline nel base64
-window._pdfBase64Result = raw.replace(/\s/g, '');    
+
+  // Modalità base64 — usata da eseguiInvioEmail per allegare il PDF
+  if (window._pdfOutputMode === 'base64') {
+    window._pdfBase64Result = doc.output('datauristring');
     return;
   }
 
-  const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-  if (isIOS) {
-    const pdfDataUri = doc.output('datauristring');
-    const newTab = window.open();
-    if (newTab) {
-      newTab.document.write(`<html><head><title>${filename}</title>
-        <meta name="viewport" content="width=device-width,initial-scale=1">
-        <style>body{margin:0;background:#333;display:flex;flex-direction:column;min-height:100vh;}
-        .bar{background:#1C1A17;padding:12px 16px;display:flex;justify-content:space-between;align-items:center;}
-        .bar span{color:#C9A84C;font-family:sans-serif;font-weight:600;}
-        .bar a{background:#C9A84C;color:#1C1A17;padding:8px 16px;border-radius:8px;text-decoration:none;font-family:sans-serif;font-weight:700;}
-        iframe{flex:1;border:none;min-height:90vh;}</style></head>
-        <body><div class="bar"><span>${filename}</span><a href="${pdfDataUri}" download="${filename}">⬇ Scarica</a></div>
-        <iframe src="${pdfDataUri}" width="100%"></iframe></body></html>`);
-      newTab.document.close();
-    } else { doc.save(filename); }
+  // Su tutti i dispositivi: scarica il PDF come file reale
+  // Questo crea un vero file .pdf che su mobile può essere aperto,
+  // salvato in Files e condiviso tramite qualsiasi app
+  const isMobile = /Android|iPhone|iPad|iPod/i.test(navigator.userAgent);
+
+  if (isMobile) {
+    // Mobile: crea link con download attribute — genera file scaricabile e condivisibile
+    try {
+      const pdfBlob = doc.output('blob');
+      const blobUrl = URL.createObjectURL(pdfBlob);
+      const a = document.createElement('a');
+      a.href = blobUrl;
+      a.download = filename;
+      a.style.display = 'none';
+      document.body.appendChild(a);
+      a.click();
+      setTimeout(() => {
+        document.body.removeChild(a);
+        URL.revokeObjectURL(blobUrl);
+      }, 3000);
+      toast('PDF scaricato! Trovi il file in Download per aprirlo e condividerlo.', 'success');
+    } catch(e) {
+      // Fallback: apri data URI in nuova scheda
+      const pdfDataUri = doc.output('datauristring');
+      const newTab = window.open();
+      if (newTab) {
+        newTab.document.write('<html><head><title>' + filename + '</title>'
+          + '<meta name="viewport" content="width=device-width,initial-scale=1">'
+          + '<style>body{margin:0;background:#1C1A17;display:flex;flex-direction:column;min-height:100vh}'
+          + '.bar{background:#2D2B27;padding:14px 16px;display:flex;justify-content:space-between;align-items:center;gap:12px}'
+          + '.bar span{color:#C9A84C;font-family:sans-serif;font-weight:600;font-size:15px}'
+          + '.bar a{background:#C9A84C;color:#1C1A17;padding:10px 18px;border-radius:8px;text-decoration:none;font-family:sans-serif;font-weight:700;font-size:14px}'
+          + 'embed{flex:1;width:100%;border:none;min-height:85vh}'
+          + '</style></head><body>'
+          + '<div class="bar"><span>' + filename + '</span>'
+          + '<a href="' + pdfDataUri + '" download="' + filename + '">⬇ Scarica PDF</a></div>'
+          + '<embed src="' + pdfDataUri + '" type="application/pdf" width="100%" height="100%">'
+          + '</body></html>');
+        newTab.document.close();
+      } else {
+        doc.save(filename);
+      }
+      toast('PDF aperto — usa "⬇ Scarica PDF" per salvarlo e condividerlo.', 'success');
+    }
   } else {
+    // Desktop: download diretto
     doc.save(filename);
+    toast('PDF generato!', 'success');
   }
-  toast('PDF generato!', 'success');
 }
 
 
@@ -2733,7 +2761,8 @@ async function getGmailToken() {
         reject(new Error(err.type === 'popup_closed' ? 'Popup chiuso — autorizza Gmail per inviare' : err.message || 'Errore autorizzazione'));
       }
     });
-client.requestAccessToken({ prompt: '' }); });
+    client.requestAccessToken({ prompt: 'consent' });
+  });
 }
 
 // Costruisce il messaggio MIME con PDF allegato
@@ -2741,23 +2770,17 @@ client.requestAccessToken({ prompt: '' }); });
 function buildMimeMessage(to, subject, bodyText, pdfBase64, filename) {
   const boundary = 'InfissiPro_' + Date.now();
 
-  // Estrai base64 puro senza prefisso data:...
-// Estrai base64 puro e rimuovi qualsiasi whitespace residuo
-const pdfB64Pure = pdfBase64.split(',').pop().replace(/\s/g, '');
-  // Subject con supporto caratteri italiani
-  const subjectB64 = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
+  // Estrai il base64 puro del PDF (senza prefisso data:...)
+  const pdfB64Pure = pdfBase64.replace(/^data:[^;]+;base64,/, '');
 
-  // Body in base64 UTF-8 safe
+  // Codifica il testo in base64 per la parte testuale
   const bodyB64 = btoa(unescape(encodeURIComponent(bodyText)));
 
-  // Spezza il PDF in righe da 76 char — obbligatorio per RFC 2045
-  const chunks = [];
-  for (let i = 0; i < pdfB64Pure.length; i += 76) {
-    chunks.push(pdfB64Pure.substring(i, i + 76));
-  }
+  // Codifica subject in base64 per supportare caratteri italiani
+  const subjectB64 = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
 
-																								  
-  const mime = [
+  // Costruisci le parti del MIME come stringa (il PDF è già in base64 — non va ri-codificato)
+  const mimeParts = [
     'MIME-Version: 1.0',
     'From: ' + GMAIL_SENDER,
     'To: ' + to,
@@ -2775,25 +2798,21 @@ const pdfB64Pure = pdfBase64.split(',').pop().replace(/\s/g, '');
     'Content-Transfer-Encoding: base64',
     'Content-Disposition: attachment; filename="' + filename + '"',
     '',
-    ...chunks,
+    pdfB64Pure,
     '',
-    '--' + boundary + '--',
+    '--' + boundary + '--'
   ].join('\r\n');
 
-  // TextEncoder gestisce correttamente tutti i byte (fix per PDF grandi)
-  const bytes = new TextEncoder().encode(mime);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 8192) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  // Converti in Uint8Array byte per byte (evita problemi con btoa su stringhe grandi)
+  const bytes = new Uint8Array(mimeParts.length);
+  for (let i = 0; i < mimeParts.length; i++) {
+    bytes[i] = mimeParts.charCodeAt(i) & 0xff;
   }
 
-						  
-				  
-													   
-  return btoa(binary)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  // Converti in base64url
+  let binary = '';
+  bytes.forEach(b => binary += String.fromCharCode(b));
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 // Genera il PDF e restituisce il base64
@@ -2828,10 +2847,6 @@ async function sendEmail(prevId) {
   const cl = clienti.find(c => c.id === prev?.clienteId);
 
  const toEmail = cl?.email || '';
-				 
-																
-		   
-   
 
   // Mostra modal di conferma con anteprima
   const numPDF = prev.numeroPrefisso ? `${prev.numeroPrefisso}/${prev.numero}` : `#${prev.numero||prevId.slice(-4)}`;
@@ -2848,10 +2863,7 @@ async function sendEmail(prevId) {
           <span style="color:var(--text3);font-weight:600">Da:</span>
           <span>${GMAIL_SENDER}</span>
           <span style="color:var(--text3);font-weight:600">A:</span>
-          <span style="color:var(--info)">${toEmail 
-  ? `<span style="color:var(--info)">${toEmail}</span>` 
-  : `<input class="form-input" id="email-destinatario" placeholder="Inserisci email cliente..." style="font-size:0.88rem;padding:6px 10px" type="email">`
-}</span>
+          <span style="color:var(--info)">${toEmail}</span>
           <span style="color:var(--text3);font-weight:600">Oggetto:</span>
           <span>Preventivo ${numPDF} – ${companyData.nome||'Simeoli Infissi'}</span>
           <span style="color:var(--text3);font-weight:600">Allegato:</span>
@@ -2874,12 +2886,7 @@ async function sendEmail(prevId) {
 }
 
 async function eseguiInvioEmail(prevId, toEmail) {
-  // Se email non c'era, prendi quella inserita manualmente
-  const emailInput = document.getElementById('email-destinatario');
-  if (emailInput) {
-    toEmail = emailInput.value.trim();
-    if (!toEmail) { toast('Inserisci un indirizzo email', 'error'); return; }
-  }  const btn = document.getElementById('btn-invia-email');
+  const btn = document.getElementById('btn-invia-email');
   const status = document.getElementById('email-status');
   const bodyText = document.getElementById('email-body')?.value || '';
 
@@ -2900,10 +2907,7 @@ async function eseguiInvioEmail(prevId, toEmail) {
     window._pdfBase64Result = null;
 
     if (!pdfB64) throw new Error('Generazione PDF fallita');
-// DEBUG TEMPORANEO — rimuovi dopo il test
-console.log('PDF base64 length:', pdfB64?.length);
-console.log('PDF inizia con:', pdfB64?.substring(0, 50));
-console.log('PDF puro length:', pdfB64?.replace(/^data:[^;]+;base64,/, '').replace(/\s/g, '').length);
+
     // 2. Ottieni token Gmail
     if (btn) btn.textContent = '🔐 Autorizzazione Gmail...';
     if (status) status.textContent = '🔐 Richiesta autorizzazione Gmail...';
