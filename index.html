@@ -2674,51 +2674,54 @@ async function generatePDF(prevId) {
   }
 
   const isIOS = /iPad|iPhone|iPod/.test(navigator.userAgent) && !window.MSStream;
-  const isAndroid = /Android/.test(navigator.userAgent);
 
-  if (isIOS) {
-    // iOS Safari: l'unico modo che funziona è aprire il data URI in nuova scheda
-    // con un bottone "Apri in Files" — il blob URL non è condivisibile
-    // il data URI invece può essere tenuto aperto e condiviso via "Condividi" di Safari
-    const pdfDataUri = doc.output('datauristring');
-    const newTab = window.open('', '_blank');
-    if (newTab) {
-      newTab.document.write(
-        '<!DOCTYPE html><html><head>'
-        + '<meta charset="UTF-8">'
-        + '<meta name="viewport" content="width=device-width,initial-scale=1">'
-        + '<title>' + filename + '</title>'
-        + '<style>'
-        + '*{box-sizing:border-box;margin:0;padding:0}'
-        + 'body{font-family:sans-serif;background:#1C1A17;display:flex;flex-direction:column;height:100vh}'
-        + '.bar{background:#2D2B27;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0}'
-        + '.bar h1{color:#C9A84C;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}'
-        + '.btn-dl{background:#C9A84C;color:#1C1A17;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;white-space:nowrap;flex-shrink:0}'
-        + '.tip{background:#3D3830;color:#C9A84C;font-size:12px;padding:8px 16px;text-align:center;flex-shrink:0}'
-        + 'iframe{flex:1;width:100%;border:none}'
-        + '</style>'
-        + '</head><body>'
-        + '<div class="bar">'
-        + '<h1>' + filename + '</h1>'
-        + '<a class="btn-dl" href="' + pdfDataUri + '" download="' + filename + '">⬇ Scarica</a>'
-        + '</div>'
-        + '<div class="tip">📤 Tieni premuto sul PDF → "Condividi" per salvare o inviare</div>'
-        + '<iframe src="' + pdfDataUri + '"></iframe>'
-        + '</body></html>'
-      );
-      newTab.document.close();
-      toast('PDF aperto — usa ⬇ Scarica o tieni premuto per condividere', 'success');
-    } else {
-      // Popup bloccato — fallback download diretto
-      doc.save(filename);
-      toast('PDF generato!', 'success');
+  if (isIOS && navigator.share) {
+    // iOS con Web Share API — condivide il vero file PDF (non il link blob)
+    try {
+      const pdfBlob = doc.output('blob');
+      const pdfFile = new File([pdfBlob], filename, { type: 'application/pdf' });
+      
+      // Verifica che il browser supporti la condivisione di file
+      if (navigator.canShare && navigator.canShare({ files: [pdfFile] })) {
+        await navigator.share({
+          title: filename,
+          files: [pdfFile]
+        });
+        toast('PDF condiviso!', 'success');
+      } else {
+        // canShare non supporta file — fallback apertura nuova scheda
+        throw new Error('canShare files not supported');
+      }
+    } catch(e) {
+      if (e.name === 'AbortError') {
+        // Utente ha annullato — nessun errore
+        toast('Condivisione annullata', 'info');
+      } else {
+        // Fallback: apri in nuova scheda con iframe
+        const pdfDataUri = doc.output('datauristring');
+        const newTab = window.open('', '_blank');
+        if (newTab) {
+          newTab.document.write(
+            '<!DOCTYPE html><html><head>'
+            + '<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1">'
+            + '<title>' + filename + '</title>'
+            + '<style>*{box-sizing:border-box;margin:0;padding:0}body{font-family:sans-serif;background:#1C1A17;display:flex;flex-direction:column;height:100vh}.bar{background:#2D2B27;padding:12px 16px;display:flex;align-items:center;justify-content:space-between;gap:10px;flex-shrink:0}.bar h1{color:#C9A84C;font-size:14px;font-weight:600;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}.btn-dl{background:#C9A84C;color:#1C1A17;padding:10px 16px;border-radius:8px;text-decoration:none;font-weight:700;font-size:13px;white-space:nowrap}iframe{flex:1;width:100%;border:none}</style>'
+            + '</head><body>'
+            + '<div class="bar"><h1>' + filename + '</h1>'
+            + '<a class="btn-dl" href="' + pdfDataUri + '" download="' + filename + '">⬇ Scarica</a></div>'
+            + '<iframe src="' + pdfDataUri + '"></iframe>'
+            + '</body></html>'
+          );
+          newTab.document.close();
+          toast('Usa il bottone ⬇ Scarica per salvare il PDF', 'success');
+        } else {
+          doc.save(filename);
+          toast('PDF generato!', 'success');
+        }
+      }
     }
-  } else if (isAndroid) {
-    // Android: download diretto funziona bene
-    doc.save(filename);
-    toast('PDF scaricato! Apri dal pannello notifiche.', 'success');
   } else {
-    // Desktop
+    // Desktop e Android — download diretto
     doc.save(filename);
     toast('PDF generato!', 'success');
   }
