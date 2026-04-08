@@ -2736,7 +2736,7 @@ async function getGmailToken() {
 client.requestAccessToken({ prompt: '' });
 }
 
-/ Costruisce il messaggio MIME con PDF allegato
+// Costruisce il messaggio MIME con PDF allegato
 // Usa Uint8Array per evitare doppia codifica del PDF
 function buildMimeMessage(to, subject, bodyText, pdfBase64, filename) {
   const boundary = 'InfissiPro_' + Date.now();
