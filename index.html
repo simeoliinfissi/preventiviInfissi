@@ -2733,7 +2733,7 @@ async function getGmailToken() {
         reject(new Error(err.type === 'popup_closed' ? 'Popup chiuso — autorizza Gmail per inviare' : err.message || 'Errore autorizzazione'));
       }
     });
-client.requestAccessToken({ prompt: '' });
+client.requestAccessToken({ prompt: '' }); });
 }
 
 // Costruisce il messaggio MIME con PDF allegato
