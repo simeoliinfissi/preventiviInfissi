@@ -560,7 +560,7 @@ const db = firebase.firestore();
 let currentUser = null;
 const ADMIN_EMAIL = 'deddyno83@gmail.com';
 
-const ALLOWED_EMAILS = ['deddyno83@gmail.com','gennarosimeoli1@gmail.com','lglsimeoli@gmail.com','simeoliinfissi@gmail.com']; // aggiungi altre mail qui
+const ALLOWED_EMAILS = ['deddyno83@gmail.com','gennarosimeoli1@gmail.com','lglsimeoli@gmail.com']; // aggiungi altre mail qui
 
 // Permessi default — vengono sovrascritti da Firestore
 let features = {
@@ -1477,6 +1477,11 @@ function newPreventivoForCliente(clienteId) {
 let preventivi = [];
 let preventivoItems = []; // items in modal editor
 let _prevSconto = { tipo: 'nessuno', valore: 0 }; // sconto corrente
+// Filtro mese — null = tutti, altrimenti 'YYYY-MM'
+let _prevMeseFiltro = (() => {
+  const n = new Date();
+  return `${n.getFullYear()}-${String(n.getMonth()+1).padStart(2,'0')}`;
+})();
 
 async function loadPreventivi() {
   const snap = await db.collection('preventivi').orderBy('createdAt','desc').get();
@@ -1491,17 +1496,30 @@ function renderPreventivi() {
     </button>`;
 
   Promise.all([loadPreventivi(), loadClienti()]).then(() => {
+    // Costruisci lista mesi disponibili dai preventivi
+    const mesiDisponibili = buildMesiDisponibili();
+    const scadutiCount = preventivi.filter(p => {
+      if (!p.validoFino || p.stato === 'accettato' || p.stato === 'rifiutato') return false;
+      const oggi = new Date(); oggi.setHours(0,0,0,0);
+      return new Date(p.validoFino) < oggi;
+    }).length;
+
     document.getElementById('page-content').innerHTML = `
-    <div class="section-header" style="flex-wrap:wrap;gap:12px">
-      <div class="search-box" style="width:260px">
+    <div style="display:flex;align-items:center;gap:12px;margin-bottom:16px;flex-wrap:wrap">
+      <div class="search-box" style="width:240px">
         <span class="search-icon">🔍</span>
         <input class="form-input" placeholder="Cerca preventivo..." oninput="filterPreventivi(this.value)">
       </div>
-      <div style="display:flex;gap:8px;flex-wrap:wrap">
-        <button class="btn btn-sm btn-primary" onclick="filterPrevByStatus('tutti',this)">Tutti</button>
-        <button class="btn btn-sm btn-secondary" onclick="filterPrevByStatus('bozza',this)">Bozze</button>
-        <button class="btn btn-sm btn-secondary" onclick="filterPrevByStatus('inviato',this)">Inviati</button>
-        <button class="btn btn-sm btn-secondary" onclick="filterPrevByStatus('accettato',this)">Accettati</button>
+      <select class="form-select" style="width:160px;font-size:0.85rem" onchange="filtraMese(this.value)" id="mese-select">
+        <option value="">📅 Tutti i mesi</option>
+        ${mesiDisponibili.map(m => `<option value="${m.val}" ${m.val===_prevMeseFiltro?'selected':''}>${m.label}</option>`).join('')}
+      </select>
+      <div style="display:flex;gap:6px;flex-wrap:wrap">
+        <button class="btn btn-sm btn-primary" id="fbtn-tutti" onclick="filterPrevByStatus('tutti',this)">Tutti</button>
+        <button class="btn btn-sm btn-secondary" id="fbtn-bozza" onclick="filterPrevByStatus('bozza',this)">Bozze</button>
+        <button class="btn btn-sm btn-secondary" id="fbtn-inviato" onclick="filterPrevByStatus('inviato',this)">Inviati</button>
+        <button class="btn btn-sm btn-secondary" id="fbtn-accettato" onclick="filterPrevByStatus('accettato',this)">Accettati</button>
+        ${scadutiCount > 0 ? `<button class="btn btn-sm btn-secondary" id="fbtn-scaduti" onclick="filterPrevByStatus('scaduti',this)" style="border-color:var(--danger);color:var(--danger)">⚠ Scaduti (${scadutiCount})</button>` : ''}
       </div>
     </div>
     <div class="card" style="padding:0">
@@ -1515,7 +1533,7 @@ function renderPreventivi() {
         </table>
       </div>
     </div>`;
-    renderPreventiviTable(preventivi);
+    applicaFiltriPreventivi();
   });
 }
 
@@ -1542,20 +1560,36 @@ function renderPreventiviTable(list) {
   const icoDel  = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14H6L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4h6v2"/></svg>`;
   const icoCopy = `<svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>`;
 
+  const oggi = new Date(); oggi.setHours(0,0,0,0);
   tbody.innerHTML = list.map(p => {
     const cl = clienti.find(c => c.id === p.clienteId);
     const nomeCliente = cl ? `${cl.cognome} ${cl.nome}` : p.clienteNome || '—';
-    // Badge scadenza
+
+    // Calcola stato scadenza
     let scadenzaBadge = '';
-    if (p.validoFino) {
-      const oggi = new Date(); oggi.setHours(0,0,0,0);
+    let isScaduto = false;
+    let isInScadenza = false;
+    if (p.validoFino && p.stato !== 'accettato' && p.stato !== 'rifiutato') {
       const scad = new Date(p.validoFino);
       const diff = Math.round((scad - oggi) / (1000*60*60*24));
-      if (diff < 0) scadenzaBadge = `<br><span style="font-size:0.68rem;color:var(--danger);font-weight:600">⚠ Scaduto</span>`;
-      else if (diff <= 5) scadenzaBadge = `<br><span style="font-size:0.68rem;color:#E67E22;font-weight:600">⏰ Scade in ${diff}gg</span>`;
+      if (diff < 0) {
+        isScaduto = true;
+        scadenzaBadge = `<br><span style="font-size:0.68rem;color:var(--danger);font-weight:600">⚠ Scaduto da ${Math.abs(diff)}gg</span>`;
+      } else if (diff <= 5) {
+        isInScadenza = true;
+        scadenzaBadge = `<br><span style="font-size:0.68rem;color:#E67E22;font-weight:600">⏰ Scade in ${diff}gg</span>`;
+      }
     }
+
+    // Stile riga: rosso per scaduti, arancio per in scadenza
+    const rowStyle = isScaduto
+      ? 'background:rgba(192,57,43,0.06);border-left:3px solid var(--danger)'
+      : isInScadenza
+        ? 'background:rgba(230,126,34,0.06);border-left:3px solid #E67E22'
+        : '';
+
     const numDisplay = p.numeroPrefisso ? `${p.numeroPrefisso}/${p.numero||p.id.slice(-4)}` : `#${p.numero||p.id.slice(-6).toUpperCase()}`;
-    return `<tr>
+    return `<tr style="${rowStyle}">
       <td><strong>${numDisplay}</strong>${scadenzaBadge}</td>
       <td>${nomeCliente}${cl?.azienda?`<br><small style="color:var(--text3)">${cl.azienda}</small>`:''}</td>
       <td>${fmtDate(p.createdAt)}</td>
@@ -1605,22 +1639,81 @@ async function cambiaStato(prevId, nuovoStato) {
 }
 
 let prevStatusFilter = 'tutti';
+let _prevSearchQ = '';
+
+// Costruisce lista mesi unici dai preventivi esistenti
+function buildMesiDisponibili() {
+  const mesi = {};
+  preventivi.forEach(p => {
+    const d = p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt || Date.now());
+    const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+    const label = d.toLocaleDateString('it-IT', { month: 'long', year: 'numeric' });
+    mesi[key] = label.charAt(0).toUpperCase() + label.slice(1);
+  });
+  return Object.entries(mesi)
+    .sort((a,b) => b[0].localeCompare(a[0]))
+    .map(([val, label]) => ({ val, label }));
+}
+
+// Applica tutti i filtri combinati: mese + stato + ricerca testo
+function applicaFiltriPreventivi() {
+  const oggi = new Date(); oggi.setHours(0,0,0,0);
+  let list = preventivi;
+
+  // Filtro mese
+  if (_prevMeseFiltro) {
+    list = list.filter(p => {
+      const d = p.createdAt?.toDate ? p.createdAt.toDate() : new Date(p.createdAt || 0);
+      const key = `${d.getFullYear()}-${String(d.getMonth()+1).padStart(2,'0')}`;
+      return key === _prevMeseFiltro;
+    });
+  }
+
+  // Filtro stato (incluso 'scaduti')
+  if (prevStatusFilter === 'scaduti') {
+    list = list.filter(p => {
+      if (!p.validoFino || p.stato === 'accettato' || p.stato === 'rifiutato') return false;
+      return new Date(p.validoFino) < oggi;
+    });
+  } else if (prevStatusFilter !== 'tutti') {
+    list = list.filter(p => p.stato === prevStatusFilter);
+  }
+
+  // Filtro ricerca testo
+  if (_prevSearchQ) {
+    const ql = _prevSearchQ.toLowerCase();
+    list = list.filter(p => {
+      const cl = clienti.find(c => c.id === p.clienteId);
+      const name = cl ? `${cl.cognome} ${cl.nome}` : p.clienteNome || '';
+      return name.toLowerCase().includes(ql) || (p.numero||'').toLowerCase().includes(ql);
+    });
+  }
+
+  renderPreventiviTable(list);
+}
+
+function filtraMese(val) {
+  _prevMeseFiltro = val;
+  applicaFiltriPreventivi();
+}
+
 function filterPrevByStatus(status, btn) {
   prevStatusFilter = status;
-  document.querySelectorAll('#preventivi-tbody').length; // update UI
-  const allBtns = btn.parentElement.querySelectorAll('.btn');
-  allBtns.forEach(b => b.className = 'btn btn-sm btn-secondary');
-  btn.className = 'btn btn-sm btn-primary';
-  const filtered = status === 'tutti' ? preventivi : preventivi.filter(p => p.stato === status);
-  renderPreventiviTable(filtered);
-}
-function filterPreventivi(q) {
-  const list = preventivi.filter(p => {
-    const cl = clienti.find(c => c.id === p.clienteId);
-    const name = cl ? `${cl.cognome} ${cl.nome}` : p.clienteNome || '';
-    return name.toLowerCase().includes(q.toLowerCase()) || (p.numero||'').toLowerCase().includes(q.toLowerCase());
+  // Aggiorna stile bottoni
+  document.querySelectorAll('[id^="fbtn-"]').forEach(b => {
+    b.className = 'btn btn-sm btn-secondary';
+    if (b.id === 'fbtn-scaduti') b.style.cssText = 'border-color:var(--danger);color:var(--danger)';
   });
-  renderPreventiviTable(list);
+  if (btn) {
+    btn.className = 'btn btn-sm btn-primary';
+    btn.style.cssText = '';
+  }
+  applicaFiltriPreventivi();
+}
+
+function filterPreventivi(q) {
+  _prevSearchQ = q;
+  applicaFiltriPreventivi();
 }
 
 // ── PREVENTIVO MODAL (editor) ──
@@ -2576,10 +2669,7 @@ async function generatePDF(prevId) {
 
   // Modalità base64 — usata da eseguiInvioEmail per allegare il PDF
   if (window._pdfOutputMode === 'base64') {
-// Usa output('datauristring') e verifica che sia pulito
-const raw = doc.output('datauristring');
-// Normalizza: rimuovi eventuali spazi/newline nel base64
-window._pdfBase64Result = raw.replace(/\s/g, '');    
+    window._pdfBase64Result = doc.output('datauristring');
     return;
   }
 
@@ -2642,7 +2732,8 @@ async function getGmailToken() {
         reject(new Error(err.type === 'popup_closed' ? 'Popup chiuso — autorizza Gmail per inviare' : err.message || 'Errore autorizzazione'));
       }
     });
-client.requestAccessToken({ prompt: '' });  });
+    client.requestAccessToken({ prompt: 'consent' });
+  });
 }
 
 // Costruisce il messaggio MIME con PDF allegato
@@ -2650,22 +2741,17 @@ client.requestAccessToken({ prompt: '' });  });
 function buildMimeMessage(to, subject, bodyText, pdfBase64, filename) {
   const boundary = 'InfissiPro_' + Date.now();
 
-  // Estrai base64 puro senza prefisso data:...
-// Estrai base64 puro e rimuovi qualsiasi whitespace residuo
-const pdfB64Pure = pdfBase64.split(',').pop().replace(/\s/g, '');
-  // Subject con supporto caratteri italiani
-  const subjectB64 = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
+  // Estrai il base64 puro del PDF (senza prefisso data:...)
+  const pdfB64Pure = pdfBase64.replace(/^data:[^;]+;base64,/, '');
 
-  // Body in base64 UTF-8 safe
+  // Codifica il testo in base64 per la parte testuale
   const bodyB64 = btoa(unescape(encodeURIComponent(bodyText)));
 
-  // Spezza il PDF in righe da 76 char — obbligatorio per RFC 2045
-  const chunks = [];
-  for (let i = 0; i < pdfB64Pure.length; i += 76) {
-    chunks.push(pdfB64Pure.substring(i, i + 76));
-  }
+  // Codifica subject in base64 per supportare caratteri italiani
+  const subjectB64 = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
 
-  const mime = [
+  // Costruisci le parti del MIME come stringa (il PDF è già in base64 — non va ri-codificato)
+  const mimeParts = [
     'MIME-Version: 1.0',
     'From: ' + GMAIL_SENDER,
     'To: ' + to,
@@ -2683,22 +2769,21 @@ const pdfB64Pure = pdfBase64.split(',').pop().replace(/\s/g, '');
     'Content-Transfer-Encoding: base64',
     'Content-Disposition: attachment; filename="' + filename + '"',
     '',
-    ...chunks,
+    pdfB64Pure,
     '',
-    '--' + boundary + '--',
+    '--' + boundary + '--'
   ].join('\r\n');
 
-  // TextEncoder gestisce correttamente tutti i byte (fix per PDF grandi)
-  const bytes = new TextEncoder().encode(mime);
-  let binary = '';
-  for (let i = 0; i < bytes.length; i += 8192) {
-    binary += String.fromCharCode(...bytes.subarray(i, i + 8192));
+  // Converti in Uint8Array byte per byte (evita problemi con btoa su stringhe grandi)
+  const bytes = new Uint8Array(mimeParts.length);
+  for (let i = 0; i < mimeParts.length; i++) {
+    bytes[i] = mimeParts.charCodeAt(i) & 0xff;
   }
 
-  return btoa(binary)
-    .replace(/\+/g, '-')
-    .replace(/\//g, '_')
-    .replace(/=+$/, '');
+  // Converti in base64url
+  let binary = '';
+  bytes.forEach(b => binary += String.fromCharCode(b));
+  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
 
 // Genera il PDF e restituisce il base64
@@ -2732,7 +2817,11 @@ async function sendEmail(prevId) {
   const prev = preventivi.find(p => p.id === prevId);
   const cl = clienti.find(c => c.id === prev?.clienteId);
 
- const toEmail = cl?.email || '';
+  const toEmail = cl?.email || '';
+  if (!toEmail) {
+    toast('Il cliente non ha un&apos;indirizzo email', 'error');
+    return;
+  }
 
   // Mostra modal di conferma con anteprima
   const numPDF = prev.numeroPrefisso ? `${prev.numeroPrefisso}/${prev.numero}` : `#${prev.numero||prevId.slice(-4)}`;
@@ -2749,10 +2838,7 @@ async function sendEmail(prevId) {
           <span style="color:var(--text3);font-weight:600">Da:</span>
           <span>${GMAIL_SENDER}</span>
           <span style="color:var(--text3);font-weight:600">A:</span>
-          <span style="color:var(--info)">${toEmail 
-  ? `<span style="color:var(--info)">${toEmail}</span>` 
-  : `<input class="form-input" id="email-destinatario" placeholder="Inserisci email cliente..." style="font-size:0.88rem;padding:6px 10px" type="email">`
-}</span>
+          <span style="color:var(--info)">${toEmail}</span>
           <span style="color:var(--text3);font-weight:600">Oggetto:</span>
           <span>Preventivo ${numPDF} – ${companyData.nome||'Simeoli Infissi'}</span>
           <span style="color:var(--text3);font-weight:600">Allegato:</span>
@@ -2775,12 +2861,7 @@ async function sendEmail(prevId) {
 }
 
 async function eseguiInvioEmail(prevId, toEmail) {
-  // Se email non c'era, prendi quella inserita manualmente
-  const emailInput = document.getElementById('email-destinatario');
-  if (emailInput) {
-    toEmail = emailInput.value.trim();
-    if (!toEmail) { toast('Inserisci un indirizzo email', 'error'); return; }
-  }  const btn = document.getElementById('btn-invia-email');
+  const btn = document.getElementById('btn-invia-email');
   const status = document.getElementById('email-status');
   const bodyText = document.getElementById('email-body')?.value || '';
 
@@ -2801,10 +2882,7 @@ async function eseguiInvioEmail(prevId, toEmail) {
     window._pdfBase64Result = null;
 
     if (!pdfB64) throw new Error('Generazione PDF fallita');
-// DEBUG TEMPORANEO — rimuovi dopo il test
-console.log('PDF base64 length:', pdfB64?.length);
-console.log('PDF inizia con:', pdfB64?.substring(0, 50));
-console.log('PDF puro length:', pdfB64?.replace(/^data:[^;]+;base64,/, '').replace(/\s/g, '').length);
+
     // 2. Ottieni token Gmail
     if (btn) btn.textContent = '🔐 Autorizzazione Gmail...';
     if (status) status.textContent = '🔐 Richiesta autorizzazione Gmail...';
@@ -3232,12 +3310,28 @@ async function globalSearch(q) {
   });
 
   // Cerca preventivi
+  const oggiSearch = new Date(); oggiSearch.setHours(0,0,0,0);
   preventivi.filter(p => {
     const cl = clienti.find(c => c.id === p.clienteId);
     return `${p.numero||''} ${p.numeroPrefisso||''} ${p.clienteNome||''} ${cl?.cognome||''} ${cl?.nome||''}`.toLowerCase().includes(ql);
-  }).slice(0,3).forEach(p => {
+  }).slice(0,4).forEach(p => {
     const num = p.numeroPrefisso ? `${p.numeroPrefisso}/${p.numero}` : `#${p.numero||p.id.slice(-4)}`;
-    results.push({ tipo: 'preventivo', icon: '📋', main: `${num} — ${p.clienteNome||''}`, sub: `${fmt(p.totaleFinale)} · ${p.stato||'bozza'}`, action: `navigate('preventivi');setTimeout(()=>openPreventivoModal('${p.id}'),300)` });
+    // Calcola se scaduto
+    let scadBadge = '';
+    let iconP = '📋';
+    if (p.validoFino && p.stato !== 'accettato' && p.stato !== 'rifiutato') {
+      const diff = Math.round((new Date(p.validoFino) - oggiSearch) / (1000*60*60*24));
+      if (diff < 0) { iconP = '⚠️'; scadBadge = ' · SCADUTO'; }
+      else if (diff <= 5) { iconP = '⏰'; scadBadge = ` · scade in ${diff}gg`; }
+    }
+    results.push({
+      tipo: 'preventivo',
+      icon: iconP,
+      main: `${num} — ${p.clienteNome||''}`,
+      sub: `${fmt(p.totaleFinale)} · ${p.stato||'bozza'}${scadBadge}`,
+      scaduto: scadBadge.includes('SCADUTO'),
+      action: `navigate('preventivi');setTimeout(()=>openPreventivoModal('${p.id}'),300)`
+    });
   });
 
   if (!results.length) {
@@ -3254,9 +3348,10 @@ async function globalSearch(q) {
   let lastTipo = '';
   results.forEach(r => {
     if (r.tipo !== lastTipo) { html += `<div class="gsr-section">${sections[r.tipo]}</div>`; lastTipo = r.tipo; }
-    html += `<div class="gsr-item" onclick="${r.action};hideGlobalSearch()">
+    const subColor = r.scaduto ? 'color:var(--danger)' : 'color:var(--text3)';
+    html += `<div class="gsr-item" onclick="${r.action};hideGlobalSearch()" style="${r.scaduto ? 'border-left:3px solid var(--danger);' : ''}">
       <span class="gsr-icon">${r.icon}</span>
-      <div><div class="gsr-main">${r.main}</div><div class="gsr-sub">${r.sub}</div></div>
+      <div><div class="gsr-main">${r.main}</div><div class="gsr-sub" style="${subColor}">${r.sub}</div></div>
     </div>`;
   });
 
