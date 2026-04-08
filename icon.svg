@@ -1,15 +1,35 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
-  <rect width="512" height="512" rx="100" fill="#2D2B27"/>
-  <rect x="80" y="95" width="352" height="285" rx="18" fill="none" stroke="#C9A84C" stroke-width="30"/>
-  <rect x="95" y="110" width="152" height="125" rx="6" fill="#C9A84C" opacity="0.08"/>
-  <rect x="265" y="110" width="152" height="125" rx="6" fill="#C9A84C" opacity="0.08"/>
-  <rect x="95" y="255" width="152" height="110" rx="6" fill="#C9A84C" opacity="0.05"/>
-  <rect x="265" y="255" width="152" height="110" rx="6" fill="#C9A84C" opacity="0.05"/>
-  <line x1="256" y1="95" x2="256" y2="380" stroke="#C9A84C" stroke-width="20"/>
-  <line x1="80" y1="240" x2="432" y2="240" stroke="#C9A84C" stroke-width="20"/>
-  <rect x="206" y="212" width="14" height="56" rx="7" fill="#C9A84C"/>
-  <circle cx="213" cy="212" r="10" fill="#C9A84C"/>
-  <rect x="292" y="212" width="14" height="56" rx="7" fill="#C9A84C"/>
-  <circle cx="299" cy="212" r="10" fill="#C9A84C"/>
-  <text x="256" y="458" font-family="Georgia,serif" font-size="66" font-weight="bold" fill="#C9A84C" text-anchor="middle">IP</text>
+  <!-- Sfondo arrotondato stile app -->
+  <rect width="512" height="512" rx="112" fill="#2D2B27"/>
+
+  <!-- Finestra principale — telaio esterno -->
+  <rect x="72" y="80" width="368" height="310" rx="18" fill="none" stroke="#C9A84C" stroke-width="26"/>
+
+  <!-- Divisore verticale centrale -->
+  <line x1="256" y1="80" x2="256" y2="390" stroke="#C9A84C" stroke-width="18"/>
+
+  <!-- Divisore orizzontale centrale -->
+  <line x1="72" y1="235" x2="440" y2="235" stroke="#C9A84C" stroke-width="18"/>
+
+  <!-- Vetro pannelli -->
+  <rect x="85" y="93" width="157" height="129" rx="6" fill="#3a5a7a" opacity="0.35"/>
+  <rect x="270" y="93" width="157" height="129" rx="6" fill="#3a5a7a" opacity="0.35"/>
+  <rect x="85" y="248" width="157" height="129" rx="6" fill="#3a5a7a" opacity="0.35"/>
+  <rect x="270" y="248" width="157" height="129" rx="6" fill="#3a5a7a" opacity="0.35"/>
+
+  <!-- Riflesso vetro -->
+  <line x1="95" y1="103" x2="130" y2="140" stroke="white" stroke-width="6" stroke-linecap="round" opacity="0.18"/>
+  <line x1="280" y1="103" x2="315" y2="140" stroke="white" stroke-width="6" stroke-linecap="round" opacity="0.18"/>
+  <line x1="95" y1="258" x2="130" y2="295" stroke="white" stroke-width="6" stroke-linecap="round" opacity="0.18"/>
+  <line x1="280" y1="258" x2="315" y2="295" stroke="white" stroke-width="6" stroke-linecap="round" opacity="0.18"/>
+
+  <!-- Maniglia -->
+  <rect x="253" y="210" width="14" height="46" rx="7" fill="#C9A84C"/>
+  <circle cx="260" cy="256" r="8" fill="#A8893A"/>
+
+  <!-- Davanzale -->
+  <rect x="52" y="388" width="408" height="22" rx="8" fill="#C9A84C"/>
+
+  <!-- Sigla IP -->
+  <text x="256" y="472" font-family="Georgia, serif" font-size="52" font-weight="bold" fill="#C9A84C" text-anchor="middle">IP</text>
 </svg>
