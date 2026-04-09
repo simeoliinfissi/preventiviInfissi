@@ -2843,14 +2843,12 @@ function buildEmailBody(prev, cl, numPDF) {
   return 'Gentile ' + nomeCliente + ',\n\nin allegato trovera\' il preventivo ' + numPDF + ' relativo alla fornitura e installazione infissi.\n\nTotale preventivo: ' + fmt(prev.totaleFinale) + validita + '\n\nPer qualsiasi informazione non esiti a contattarci.\n\nCordiali saluti,\n' + (companyData.nome||'') + (companyData.telefono ? '\nTel. ' + companyData.telefono : '') + (companyData.email ? '\n' + companyData.email : '');
 }
 
-// Funzione principale: invia email con PDF allegato
 async function sendEmail(prevId) {
   await Promise.all([loadPreventivi(), loadClienti(), loadCompany()]);
   const prev = preventivi.find(p => p.id === prevId);
   const cl = clienti.find(c => c.id === prev?.clienteId);
 
  const toEmail = cl?.email || '';
-
   // Mostra modal di conferma con anteprima
   const numPDF = prev.numeroPrefisso ? `${prev.numeroPrefisso}/${prev.numero}` : `#${prev.numero||prevId.slice(-4)}`;
   const nomeCliente = cl ? `${cl.cognome} ${cl.nome}` : prev.clienteNome || '';
@@ -2866,9 +2864,10 @@ async function sendEmail(prevId) {
           <span style="color:var(--text3);font-weight:600">Da:</span>
           <span>${GMAIL_SENDER}</span>
           <span style="color:var(--text3);font-weight:600">A:</span>
-          <span style="color:var(--info)">${toEmail}</span>` 
-          : `<input class="form-input" id="email-destinatario" placeholder="Inserisci email cliente..." style="font-size:0.88rem;padding:6px 10px" type="email">`
-          }</span>          
+          <span style="color:var(--info)">${toEmail 
+  ? `<span style="color:var(--info)">${toEmail}</span>` 
+  : `<input class="form-input" id="email-destinatario" placeholder="Inserisci email cliente..." style="font-size:0.88rem;padding:6px 10px" type="email">`
+}</span>
           <span style="color:var(--text3);font-weight:600">Oggetto:</span>
           <span>Preventivo ${numPDF} – ${companyData.nome||'Simeoli Infissi'}</span>
           <span style="color:var(--text3);font-weight:600">Allegato:</span>
