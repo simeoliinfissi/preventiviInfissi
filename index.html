@@ -1828,7 +1828,7 @@ async function openPreventivoModal(id = null, preselClienteId = null) {
     </div>
     <div class="modal-footer">
       <button class="btn btn-secondary" onclick="closeModal()">Annulla</button>
-      <button class="btn btn-primary" onclick="savePreventivo('${id||''}')">💾 Salva Preventivo</button>
+      <button class="btn btn-primary" id="btn-salva-preventivo" onclick="savePreventivo('${id||''}')">💾 Salva Preventivo</button>
     </div>`, true);
 
   renderPreventivoItems();
@@ -2238,19 +2238,61 @@ async function savePreventivo(id) {
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
 
-  if (id) {
-    await db.collection('preventivi').doc(id).update(data);
-    toast('Preventivo aggiornato!', 'success');
-  } else {
-    // get next number
-    const countSnap = await db.collection('preventivi').get();
-    data.numero = String(countSnap.size + 1).padStart(4, '0');
-    data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-    await db.collection('preventivi').add(data);
-    toast('Preventivo salvato!', 'success');
+  // Mostra stato salvataggio sul bottone
+  const saveBtn = document.getElementById('btn-salva-preventivo');
+  if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ Salvataggio...'; }
+
+  // Salva bozza locale come backup anti-standby
+  try {
+    localStorage.setItem('_prevBozza', JSON.stringify({ id, data, ts: Date.now() }));
+  } catch(e) {}
+
+  try {
+    if (id) {
+      await db.collection('preventivi').doc(id).update(data);
+      toast('Preventivo aggiornato!', 'success');
+    } else {
+      // get next number
+      const countSnap = await db.collection('preventivi').get();
+      data.numero = String(countSnap.size + 1).padStart(4, '0');
+      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+      await db.collection('preventivi').add(data);
+      toast('Preventivo salvato!', 'success');
+    }
+    // Salvataggio ok — rimuovi bozza locale
+    try { localStorage.removeItem('_prevBozza'); } catch(e) {}
+    closeModal();
+    renderPreventivi();
+  } catch(err) {
+    console.error('Errore salvataggio preventivo:', err);
+    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Salva Preventivo'; }
+
+    // Prova a riconnettere Firebase e riprovare una volta
+    if (err.code === 'unavailable' || err.message?.includes('network') || err.message?.includes('offline')) {
+      toast('Connessione persa. Riconnessione in corso...', 'info');
+      try {
+        await firebase.firestore().enableNetwork();
+        await new Promise(r => setTimeout(r, 1500));
+        // Riprova
+        if (id) {
+          await db.collection('preventivi').doc(id).update(data);
+        } else {
+          const countSnap2 = await db.collection('preventivi').get();
+          data.numero = String(countSnap2.size + 1).padStart(4, '0');
+          data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+          await db.collection('preventivi').add(data);
+        }
+        try { localStorage.removeItem('_prevBozza'); } catch(e) {}
+        toast('Preventivo salvato dopo riconnessione!', 'success');
+        closeModal();
+        renderPreventivi();
+      } catch(err2) {
+        toast('Errore di rete — il preventivo è salvato in bozza locale. Riprova tra qualche secondo.', 'error');
+      }
+    } else {
+      toast('Errore nel salvataggio: ' + (err.message || err.code || 'errore sconosciuto'), 'error');
+    }
   }
-  closeModal();
-  renderPreventivi();
 }
 
 // ── DUPLICA PREVENTIVO ──
@@ -3402,6 +3444,60 @@ async function globalSearch(q) {
 loadCompany();
 loadCatMat();
 loadFeatures();
+
+// ── Rilevamento standby/risveglio ──
+// Quando il PC esce dallo standby, il browser può aver perso la connessione Firebase
+let _lastActivityTs = Date.now();
+let _connWarningShown = false;
+
+// Aggiorna timestamp ogni volta che l'utente interagisce
+document.addEventListener('click', () => { _lastActivityTs = Date.now(); });
+document.addEventListener('keydown', () => { _lastActivityTs = Date.now(); });
+
+// Controlla ogni 30 secondi se la pagina era inattiva (standby)
+setInterval(() => {
+  const now = Date.now();
+  const inattivita = now - _lastActivityTs;
+  // Se la pagina era inattiva per più di 5 minuti, probabilmente c'è stato standby
+  if (inattivita > 5 * 60 * 1000 && !_connWarningShown) {
+    // Non fare nulla di visivo, ma riabilita la rete Firebase silenziosamente
+    firebase.firestore().enableNetwork().catch(() => {});
+  }
+}, 30000);
+
+// Riconnetti Firebase quando la pagina torna in primo piano (visibilitychange)
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    const inattivita = Date.now() - _lastActivityTs;
+    // Se era inattivo da più di 2 minuti, riconnetti e ricarica i dati
+    if (inattivita > 2 * 60 * 1000) {
+      firebase.firestore().enableNetwork().then(() => {
+        // Ricarica dati silenziosamente
+        loadPreventivi().catch(() => {});
+        loadClienti().catch(() => {});
+        // Se siamo sulla pagina preventivi, aggiorna la tabella
+        if (currentPage === 'preventivi') {
+          Promise.all([loadPreventivi(), loadClienti()]).then(() => {
+            applicaFiltriPreventivi();
+          }).catch(() => {});
+        }
+      }).catch(() => {});
+    }
+    _lastActivityTs = Date.now();
+  }
+});
+
+// Controlla se c'è una bozza locale non salvata dal sessione precedente
+setTimeout(() => {
+  try {
+    const bozza = localStorage.getItem('_prevBozza');
+    if (bozza) {
+      const parsed = JSON.parse(bozza);
+      const minFa = Math.round((Date.now() - parsed.ts) / 60000);
+      toast(`⚠ Trovata una bozza non salvata di ${minFa} minuti fa. Apri un nuovo preventivo per recuperarla.`, 'info');
+    }
+  } catch(e) {}
+}, 3000);
 </script>
 </body>
 </html>
