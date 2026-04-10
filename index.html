@@ -2943,17 +2943,20 @@ async function getGmailToken() {
 function buildMimeMessage(to, subject, bodyText, pdfBase64, filename) {
   const boundary = 'InfissiPro_' + Date.now();
 
-  // Estrai il base64 puro del PDF (senza prefisso data:...)
-  const pdfB64Pure = pdfBase64.replace(/^data:[^;]+;base64,/, '');
+  // 1. Estrai base64 puro del PDF — rimuovi prefisso data:... e spazi
+  const pdfB64Pure = pdfBase64.split(',').pop().replace(/\s/g, '');
 
-  // Codifica il testo in base64 per la parte testuale
-  const bodyB64 = btoa(unescape(encodeURIComponent(bodyText)));
+  // 2. Spezza in righe da 76 char (RFC 2045 obbligatorio)
+  const pdfLines = pdfB64Pure.match(/.{1,76}/g) || [];
 
-  // Codifica subject in base64 per supportare caratteri italiani
+  // 3. Subject con UTF-8
   const subjectB64 = '=?UTF-8?B?' + btoa(unescape(encodeURIComponent(subject))) + '?=';
 
-  // Costruisci le parti del MIME come stringa (il PDF è già in base64 — non va ri-codificato)
-  const mimeParts = [
+  // 4. Body in base64 UTF-8
+  const bodyB64 = btoa(unescape(encodeURIComponent(bodyText)));
+
+  // 5. Costruisci MIME — tutto ASCII, nessuna codifica aggiuntiva
+  const lines = [
     'MIME-Version: 1.0',
     'From: ' + GMAIL_SENDER,
     'To: ' + to,
@@ -2971,21 +2974,21 @@ function buildMimeMessage(to, subject, bodyText, pdfBase64, filename) {
     'Content-Transfer-Encoding: base64',
     'Content-Disposition: attachment; filename="' + filename + '"',
     '',
-    pdfB64Pure,
+    ...pdfLines,
     '',
-    '--' + boundary + '--'
-  ].join('\r\n');
+    '--' + boundary + '--',
+    ''
+  ];
 
-  // Converti in Uint8Array byte per byte (evita problemi con btoa su stringhe grandi)
-  const bytes = new Uint8Array(mimeParts.length);
-  for (let i = 0; i < mimeParts.length; i++) {
-    bytes[i] = mimeParts.charCodeAt(i) & 0xff;
-  }
+  // 6. Unisci con CRLF — tutto il contenuto è già ASCII puro
+  const mimeStr = lines.join('\r\n');
 
-  // Converti in base64url
-  let binary = '';
-  bytes.forEach(b => binary += String.fromCharCode(b));
-  return btoa(binary).replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
+  // 7. Converti in base64url per Gmail API
+  // usa btoa direttamente — mimeStr è ASCII puro, nessun problema
+  return btoa(mimeStr)
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
 }
 
 // Genera il PDF e restituisce il base64
