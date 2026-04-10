@@ -3069,16 +3069,21 @@ async function eseguiInvioEmail(prevId, toEmail) {
   const status = document.getElementById('email-status');
   const bodyText = document.getElementById('email-body')?.value || '';
 
-  if (btn) { btn.disabled = true; btn.textContent = '⏳ Generazione PDF...'; }
+  if (btn) { btn.disabled = true; btn.textContent = '🔐 Autorizzazione Gmail...'; }
+  if (status) { status.style.display='block'; status.style.background='var(--surface2)'; status.textContent = '🔐 Autorizzazione Gmail in corso...'; }
 
   try {
-    // 1. Genera PDF in base64
-    if (status) { status.style.display='block'; status.style.background='var(--surface2)'; status.textContent = '📄 Generazione PDF in corso...'; }
+    // 1. PRIMA richiedi il token — deve avvenire subito dopo il click
+    //    altrimenti il browser blocca il popup OAuth
+    const token = await getGmailToken();
+
+    // 2. Ora genera il PDF (il popup è già stato gestito)
+    if (btn) btn.textContent = '⏳ Generazione PDF...';
+    if (status) status.textContent = '📄 Generazione PDF in corso...';
 
     await Promise.all([loadPreventivi(), loadClienti(), loadCompany()]);
     const prev = preventivi.find(p => p.id === prevId);
 
-    // Genera PDF e ottieni base64
     window._pdfOutputMode = 'base64';
     await generatePDF(prevId);
     const pdfB64 = window._pdfBase64Result;
@@ -3087,15 +3092,9 @@ async function eseguiInvioEmail(prevId, toEmail) {
 
     if (!pdfB64) throw new Error('Generazione PDF fallita');
 
-    // 2. Ottieni token Gmail
-    if (btn) btn.textContent = '🔐 Autorizzazione Gmail...';
-    if (status) status.textContent = '🔐 Richiesta autorizzazione Gmail...';
-
-    const token = await getGmailToken();
-
-    // 3. Costruisci messaggio MIME
+    // 3. Costruisci messaggio MIME e invia
     if (btn) btn.textContent = '📤 Invio in corso...';
-    if (status) status.textContent = '📤 Invio email...';
+    if (status) status.textContent = '📤 Invio email con PDF allegato...';
 
     const numPDF = prev.numeroPrefisso ? `${prev.numeroPrefisso}/${prev.numero}` : prev.numero || prevId.slice(-4);
     const subject = `Preventivo ${numPDF} – ${companyData.nome||'Simeoli Infissi'}`;
