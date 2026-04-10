@@ -1721,7 +1721,16 @@ async function openPreventivoModal(id = null, preselClienteId = null) {
   // Assicura che i prodotti siano sempre caricati prima di aprire
   if (!prodotti.length) await loadProdotti();
   const prev = id ? preventivi.find(x => x.id === id) : null;
-  preventivoItems = prev ? JSON.parse(JSON.stringify(prev.items || [])) : [];
+  // Carica items e reiniezione foto dal catalogo prodotti
+  // (le foto non vengono salvate su Firestore per rispettare il limite 1MB)
+  if (prev && prev.items) {
+    preventivoItems = prev.items.map(it => {
+      const prodotto = prodotti.find(p => p.id === it.prodottoId);
+      return { ...it, foto: prodotto?.foto || null };
+    });
+  } else {
+    preventivoItems = [];
+  }
   _prevSconto = prev ? { tipo: prev.scontoTipo||'nessuno', valore: prev.scontoValore||0 } : { tipo: 'nessuno', valore: 0 };
 
   const clienteOptions = clienti.map(c =>
@@ -2200,6 +2209,97 @@ function confirmProductPick() {
   toast(`${picked.length} prodotto${picked.length>1?'i':''} aggiunto${picked.length>1?'i':''}!`, 'success');
 }
 
+// ════════════════════════════════════════════
+//  SISTEMA BOZZE LOCALI — salvataggio sicuro
+// ════════════════════════════════════════════
+const BOZZE_KEY = 'infissipro_bozze';
+
+function salvaBozzaLocale(id, data) {
+  try {
+    const bozze = JSON.parse(localStorage.getItem(BOZZE_KEY) || '{}');
+    const chiave = id || ('new_' + Date.now());
+    bozze[chiave] = { id, data, ts: Date.now(), _chiave: chiave };
+    localStorage.setItem(BOZZE_KEY, JSON.stringify(bozze));
+    return chiave;
+  } catch(e) { console.warn('Impossibile salvare bozza locale:', e); return null; }
+}
+
+function rimuoviBozzaLocale(chiave) {
+  try {
+    const bozze = JSON.parse(localStorage.getItem(BOZZE_KEY) || '{}');
+    delete bozze[chiave];
+    localStorage.setItem(BOZZE_KEY, JSON.stringify(bozze));
+  } catch(e) {}
+}
+
+function getBozzeLocali() {
+  try {
+    return Object.values(JSON.parse(localStorage.getItem(BOZZE_KEY) || '{}'));
+  } catch(e) { return []; }
+}
+
+async function sincronizzaBozzeInSospeso() {
+  const bozze = getBozzeLocali();
+  if (!bozze.length) return;
+  let sincronizzate = 0;
+  for (const bozza of bozze) {
+    try {
+      const d = { ...bozza.data, updatedAt: firebase.firestore.FieldValue.serverTimestamp() };
+      if (bozza.id) {
+        await db.collection('preventivi').doc(bozza.id).update(d);
+      } else {
+        const countSnap = await db.collection('preventivi').get();
+        d.numero = String(countSnap.size + 1).padStart(4, '0');
+        d.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+        await db.collection('preventivi').add(d);
+      }
+      rimuoviBozzaLocale(bozza._chiave);
+      sincronizzate++;
+    } catch(e) { /* lascia la bozza per dopo */ }
+  }
+  if (sincronizzate > 0) {
+    aggiornaBadgeBozze();
+    toast(`✅ ${sincronizzate} preventivo${sincronizzate>1?'i':''} recuperato${sincronizzate>1?'i':''} dalla bozza locale!`, 'success');
+    renderPreventivi();
+  }
+}
+
+function mostraPannelloBozze() {
+  const bozze = getBozzeLocali();
+  if (!bozze.length) { toast('Nessuna bozza locale trovata', 'info'); return; }
+  openModal(`
+    <div class="modal-header">
+      <h2 class="modal-title">📋 Bozze non salvate (${bozze.length})</h2>
+      <button class="btn-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <p style="color:var(--text2);font-size:0.88rem;margin-bottom:16px">
+        Questi preventivi erano in attesa di sincronizzazione. Clicca "Recupera tutto" per salvarli su Firebase.
+      </p>
+      <div style="display:flex;flex-direction:column;gap:8px;margin-bottom:16px">
+        ${bozze.map(b => {
+          const minFa = Math.round((Date.now() - b.ts) / 60000);
+          const cl = clienti.find(c => c.id === b.data?.clienteId);
+          const nomeCliente = cl ? cl.cognome + ' ' + cl.nome : b.data?.clienteNome || '—';
+          return `<div style="background:var(--surface2);border-radius:8px;padding:12px 14px;border-left:3px solid var(--gold)">
+            <div style="font-weight:600;font-size:0.9rem">${nomeCliente}</div>
+            <div style="font-size:0.75rem;color:var(--text3);margin-top:2px">
+              Salvato localmente ${minFa < 60 ? minFa + ' minuti fa' : Math.round(minFa/60) + ' ore fa'} 
+              · ${b.data?.items?.length || 0} prodotti
+              · ${b.id ? 'Modifica' : 'Nuovo preventivo'}
+            </div>
+          </div>`;
+        }).join('')}
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal()">Chiudi</button>
+      <button class="btn btn-primary" onclick="closeModal();sincronizzaBozzeInSospeso()">
+        ☁️ Recupera tutto su Firebase
+      </button>
+    </div>`);
+}
+
 async function savePreventivo(id) {
   const clienteId = document.getElementById('pv-cliente').value;
   if (!clienteId) { toast('Seleziona un cliente', 'error'); return; }
@@ -2221,78 +2321,104 @@ async function savePreventivo(id) {
   const tempiConsegna = document.getElementById('pv-tempi')?.value || '';
   const pagamenti = document.getElementById('pv-pagamenti')?.value || '';
 
+  // Rimuovi foto base64 dagli items (Firestore limite 1MB)
+  const itemsPerSalvataggio = preventivoItems.map(it => {
+    const { foto, ...itemSenzaFoto } = it;
+    return itemSenzaFoto;
+  });
+
+  // Controllo dimensione
+  if (JSON.stringify(itemsPerSalvataggio).length > 900000) {
+    toast('⚠ Preventivo troppo grande. Riduci il numero di prodotti.', 'error');
+    return;
+  }
+
   const data = {
     clienteId,
     clienteNome: cl ? `${cl.cognome} ${cl.nome}` : '',
     stato: document.getElementById('pv-stato').value,
     note: document.getElementById('pv-note').value,
-    noteInterne,
-    tempiConsegna,
-    pagamenti,
-    numeroPrefisso: prefisso,
-    validoFino,
-    items: preventivoItems,
+    noteInterne, tempiConsegna, pagamenti,
+    numeroPrefisso: prefisso, validoFino,
+    items: itemsPerSalvataggio,
     subtotale, scontoAmt, scontoTipo: _prevSconto.tipo, scontoValore: _prevSconto.valore,
-    imponibile, ivaAmt, totaleFinale,
-    ivaPerc: iva,
+    imponibile, ivaAmt, totaleFinale, ivaPerc: iva,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
 
-  // Mostra stato salvataggio sul bottone
+  // ── LIVELLO 1: salva subito in localStorage ──
+  const chiaveBozza = salvaBozzaLocale(id, data);
+
+  // Feedback sul bottone
   const saveBtn = document.getElementById('btn-salva-preventivo');
   if (saveBtn) { saveBtn.disabled = true; saveBtn.textContent = '⏳ Salvataggio...'; }
 
-  // Salva bozza locale come backup anti-standby
-  try {
-    localStorage.setItem('_prevBozza', JSON.stringify({ id, data, ts: Date.now() }));
-  } catch(e) {}
+  // ── LIVELLO 2: salva su Firebase con 3 tentativi ──
+  const MAX_TENTATIVI = 3;
+  let ultimoErrore = null;
 
-  try {
-    if (id) {
-      await db.collection('preventivi').doc(id).update(data);
-      toast('Preventivo aggiornato!', 'success');
-    } else {
-      // get next number
-      const countSnap = await db.collection('preventivi').get();
-      data.numero = String(countSnap.size + 1).padStart(4, '0');
-      data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-      await db.collection('preventivi').add(data);
-      toast('Preventivo salvato!', 'success');
-    }
-    // Salvataggio ok — rimuovi bozza locale
-    try { localStorage.removeItem('_prevBozza'); } catch(e) {}
-    closeModal();
-    renderPreventivi();
-  } catch(err) {
-    console.error('Errore salvataggio preventivo:', err);
-    if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Salva Preventivo'; }
-
-    // Prova a riconnettere Firebase e riprovare una volta
-    if (err.code === 'unavailable' || err.message?.includes('network') || err.message?.includes('offline')) {
-      toast('Connessione persa. Riconnessione in corso...', 'info');
-      try {
+  for (let tentativo = 1; tentativo <= MAX_TENTATIVI; tentativo++) {
+    try {
+      if (tentativo > 1) {
+        if (saveBtn) saveBtn.textContent = `⏳ Tentativo ${tentativo}/${MAX_TENTATIVI}...`;
         await firebase.firestore().enableNetwork();
-        await new Promise(r => setTimeout(r, 1500));
-        // Riprova
-        if (id) {
-          await db.collection('preventivi').doc(id).update(data);
-        } else {
-          const countSnap2 = await db.collection('preventivi').get();
-          data.numero = String(countSnap2.size + 1).padStart(4, '0');
-          data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
-          await db.collection('preventivi').add(data);
-        }
-        try { localStorage.removeItem('_prevBozza'); } catch(e) {}
-        toast('Preventivo salvato dopo riconnessione!', 'success');
-        closeModal();
-        renderPreventivi();
-      } catch(err2) {
-        toast('Errore di rete — il preventivo è salvato in bozza locale. Riprova tra qualche secondo.', 'error');
+        await new Promise(r => setTimeout(r, tentativo * 1000));
       }
-    } else {
-      toast('Errore nel salvataggio: ' + (err.message || err.code || 'errore sconosciuto'), 'error');
+
+      if (id) {
+        await db.collection('preventivi').doc(id).update(data);
+      } else {
+        const countSnap = await db.collection('preventivi').get();
+        data.numero = String(countSnap.size + 1).padStart(4, '0');
+        data.createdAt = firebase.firestore.FieldValue.serverTimestamp();
+        await db.collection('preventivi').add(data);
+      }
+
+      // ✅ Successo — rimuovi bozza locale e chiudi
+      rimuoviBozzaLocale(chiaveBozza);
+      aggiornaBadgeBozze();
+      toast(id ? 'Preventivo aggiornato!' : 'Preventivo salvato!', 'success');
+      closeModal();
+      renderPreventivi();
+      return;
+
+    } catch(err) {
+      ultimoErrore = err;
+      console.warn(`Tentativo ${tentativo} fallito:`, err.code, err.message);
     }
   }
+
+  // ── LIVELLO 3: tutti i tentativi falliti — dati al sicuro in locale ──
+  console.error('Salvataggio Firebase fallito dopo 3 tentativi:', ultimoErrore);
+  if (saveBtn) { saveBtn.disabled = false; saveBtn.textContent = '💾 Salva Preventivo'; }
+
+  // Mostra avviso con opzione di recupero
+  openModal(`
+    <div class="modal-header">
+      <h2 class="modal-title" style="color:var(--danger)">⚠️ Problema di connessione</h2>
+      <button class="btn-close" onclick="closeModal()">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:#FFF8E1;border:1px solid #FFD54F;border-radius:8px;padding:16px;margin-bottom:16px">
+        <div style="font-weight:700;margin-bottom:6px">✅ I tuoi dati sono al sicuro</div>
+        <div style="font-size:0.88rem;color:var(--text2)">
+          Il preventivo è stato salvato localmente su questo dispositivo. 
+          Non hai perso nulla.
+        </div>
+      </div>
+      <div style="font-size:0.88rem;color:var(--text2);margin-bottom:12px">
+        <strong>Errore:</strong> ${ultimoErrore?.message || ultimoErrore?.code || 'Connessione a Firebase non disponibile'}
+      </div>
+      <div style="font-size:0.88rem;color:var(--text2)">
+        Quando la connessione torna, clicca <strong>"Riprova sincronizzazione"</strong> per salvare su Firebase.
+      </div>
+    </div>
+    <div class="modal-footer" style="flex-wrap:wrap;gap:8px">
+      <button class="btn btn-secondary" onclick="closeModal()">Chiudi — riprovo dopo</button>
+      <button class="btn btn-primary" onclick="closeModal();sincronizzaBozzeInSospeso()">
+        ☁️ Riprova sincronizzazione
+      </button>
+    </div>`);
 }
 
 // ── DUPLICA PREVENTIVO ──
@@ -2527,10 +2653,12 @@ async function generatePDF(prevId) {
     // Colonna immagine
     doc.setDrawColor(200,200,200);
     doc.rect(colImg, y+2, 36, imgH, 'S');
-    if (it.foto) {
+    // Foto: prendi dall'item o dal catalogo prodotti (le foto non sono salvate su Firestore)
+    const fotoSrc = it.foto || prodotti.find(p => p.id === it.prodottoId)?.foto || null;
+    if (fotoSrc) {
       try {
-        const ext2 = it.foto.includes('png')||it.foto.includes('PNG') ? 'PNG' : 'JPEG';
-        doc.addImage(it.foto, ext2, colImg+1, y+3, 34, imgH-2, '', 'FAST');
+        const ext2 = fotoSrc.includes('png')||fotoSrc.includes('PNG') ? 'PNG' : 'JPEG';
+        doc.addImage(fotoSrc, ext2, colImg+1, y+3, 34, imgH-2, '', 'FAST');
       } catch(e) {
         doc.setFontSize(7); doc.setTextColor(160,160,160);
         doc.text('img', colImg+18, y+imgH/2+2, {align:'center'});
@@ -3445,6 +3573,40 @@ loadCompany();
 loadCatMat();
 loadFeatures();
 
+// ── Controlla bozze in sospeso all'avvio e al ritorno online ──
+window.addEventListener('online', () => {
+  const bozze = getBozzeLocali();
+  if (bozze.length > 0) {
+    toast(`🔄 Connessione ripristinata — ${bozze.length} preventivo${bozze.length>1?'i':''} in attesa di sincronizzazione`, 'info');
+    setTimeout(() => sincronizzaBozzeInSospeso(), 2000);
+  }
+});
+
+function aggiornaBadgeBozze() {
+  const bozze = getBozzeLocali();
+  const esistente = document.getElementById('badge-bozze-btn');
+  if (bozze.length === 0) {
+    if (esistente) esistente.remove();
+    return;
+  }
+  if (esistente) {
+    esistente.title = `${bozze.length} preventivo${bozze.length>1?'i':''} non sincronizzato${bozze.length>1?'i':''}`;
+    const span = esistente.querySelector('span');
+    if (span) span.textContent = bozze.length;
+    return;
+  }
+  const btn = document.createElement('button');
+  btn.id = 'badge-bozze-btn';
+  btn.className = 'btn btn-ghost btn-icon';
+  btn.title = `${bozze.length} preventivo${bozze.length>1?'i':''} non sincronizzato${bozze.length>1?'i':''}`;
+  btn.style.cssText = 'position:relative;color:#E67E22';
+  btn.innerHTML = `<svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2"><path d="M3 15v4c0 1.1.9 2 2 2h14a2 2 0 0 0 2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
+    <span style="position:absolute;top:2px;right:2px;background:#E67E22;color:white;border-radius:50%;width:16px;height:16px;font-size:10px;display:flex;align-items:center;justify-content:center;font-weight:700">${bozze.length}</span>`;
+  btn.onclick = () => mostraPannelloBozze();
+  const searchBtn = document.getElementById('global-search-btn');
+  if (searchBtn) searchBtn.parentElement.insertBefore(btn, searchBtn);
+}
+
 // ── Rilevamento standby/risveglio ──
 // Quando il PC esce dallo standby, il browser può aver perso la connessione Firebase
 let _lastActivityTs = Date.now();
@@ -3487,16 +3649,14 @@ document.addEventListener('visibilitychange', () => {
   }
 });
 
-// Controlla se c'è una bozza locale non salvata dal sessione precedente
+// Controlla bozze in sospeso all'avvio
 setTimeout(() => {
-  try {
-    const bozza = localStorage.getItem('_prevBozza');
-    if (bozza) {
-      const parsed = JSON.parse(bozza);
-      const minFa = Math.round((Date.now() - parsed.ts) / 60000);
-      toast(`⚠ Trovata una bozza non salvata di ${minFa} minuti fa. Apri un nuovo preventivo per recuperarla.`, 'info');
-    }
-  } catch(e) {}
+  const bozze = getBozzeLocali();
+  if (bozze.length > 0) {
+    aggiornaBadgeBozze();
+    const oldest = Math.round((Date.now() - Math.min(...bozze.map(b => b.ts))) / 60000);
+    toast(`⚠ ${bozze.length} preventivo${bozze.length>1?'i':''} non sincronizzato${bozze.length>1?'i':''} (${oldest < 60 ? oldest + ' min fa' : Math.round(oldest/60) + ' ore fa'}) — clicca 📤 per recuperare`, 'info');
+  }
 }, 3000);
 </script>
 </body>
