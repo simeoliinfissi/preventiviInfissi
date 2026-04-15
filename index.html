@@ -1497,6 +1497,7 @@ function newPreventivoForCliente(clienteId) {
 let preventivi = [];
 let preventivoItems = []; // items in modal editor
 let _prevSconto = { tipo: 'nessuno', valore: 0 }; // sconto corrente
+let _prevIvaEsclusa = false; // se true, IVA non applicata al preventivo
 // Filtro mese — null = tutti, altrimenti 'YYYY-MM'
 let _prevMeseFiltro = (() => {
   const n = new Date();
@@ -1752,6 +1753,7 @@ async function openPreventivoModal(id = null, preselClienteId = null) {
     preventivoItems = [];
   }
   _prevSconto = prev ? { tipo: prev.scontoTipo||'nessuno', valore: prev.scontoValore||0 } : { tipo: 'nessuno', valore: 0 };
+  _prevIvaEsclusa = prev ? (prev.ivaEsclusa === true) : false;
 
   const clienteOptions = clienti.map(c =>
     `<option value="${c.id}" ${(prev?.clienteId||preselClienteId)===c.id?'selected':''}>${c.cognome} ${c.nome}${c.azienda?' — '+c.azienda:''}</option>`
@@ -2134,6 +2136,11 @@ function refreshItemTotals(i) {
   updateTotaleBox();
 }
 
+function toggleIvaEsclusa(checked) {
+  _prevIvaEsclusa = checked;
+  updateTotaleBox();
+}
+
 function updateTotaleBox() {
   const totBox = document.getElementById('pv-totale-box');
   if (!totBox || !preventivoItems.length) return;
@@ -2143,7 +2150,7 @@ function updateTotaleBox() {
   if (_prevSconto.tipo === 'perc' && _prevSconto.valore > 0) scontoAmt = subtot * _prevSconto.valore / 100;
   else if (_prevSconto.tipo === 'fisso' && _prevSconto.valore > 0) scontoAmt = Math.min(_prevSconto.valore, subtot);
   const imponibile = subtot - scontoAmt;
-  const ivaAmt = imponibile * iva / 100;
+  const ivaAmt = _prevIvaEsclusa ? 0 : imponibile * iva / 100;
   const totale = imponibile + ivaAmt;
   const scontoSelected = (v) => _prevSconto.tipo === v ? 'selected' : '';
   totBox.innerHTML = `
@@ -2169,8 +2176,19 @@ function updateTotaleBox() {
       <div class="totale-row" style="margin-bottom:6px"><span style="color:rgba(255,255,255,0.6)">Subtotale</span><span>${fmt(subtot)}</span></div>
       ${scontoAmt > 0 ? `<div class="totale-row" style="margin-bottom:6px"><span style="color:#7DCEA0">Sconto</span><span style="color:#7DCEA0">− ${fmt(scontoAmt)}</span></div>` : ''}
       <div class="totale-row" style="margin-bottom:6px"><span style="color:rgba(255,255,255,0.6)">Imponibile</span><span>${fmt(imponibile)}</span></div>
-      <div class="totale-row" style="margin-bottom:12px"><span style="color:rgba(255,255,255,0.6)">IVA ${iva}%</span><span>${fmt(ivaAmt)}</span></div>
+      ${_prevIvaEsclusa
+        ? `<div class="totale-row" style="margin-bottom:12px"><span style="color:rgba(255,255,255,0.45);text-decoration:line-through">IVA ${iva}%</span><span style="color:rgba(255,255,255,0.3);text-decoration:line-through">${fmt(imponibile * iva / 100)}</span></div>`
+        : `<div class="totale-row" style="margin-bottom:12px"><span style="color:rgba(255,255,255,0.6)">IVA ${iva}%</span><span>${fmt(ivaAmt)}</span></div>`
+      }
       <div class="totale-row"><span style="font-size:0.9rem">TOTALE</span><span class="totale-final">${fmt(totale)}</span></div>
+    </div>
+    <div style="margin-top:10px;display:flex;align-items:center;gap:8px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;user-select:none;font-size:0.85rem;color:var(--text2)">
+        <input type="checkbox" id="pv-iva-esclusa" ${_prevIvaEsclusa ? 'checked' : ''}
+          onchange="toggleIvaEsclusa(this.checked)"
+          style="width:16px;height:16px;cursor:pointer;accent-color:var(--gold)">
+        <span>Escludi IVA dal totale</span>
+      </label>
     </div>`;
 }
 
@@ -2351,7 +2369,7 @@ async function savePreventivo(id) {
   if (_prevSconto.tipo === 'perc' && _prevSconto.valore > 0) scontoAmt = subtotale * _prevSconto.valore / 100;
   else if (_prevSconto.tipo === 'fisso' && _prevSconto.valore > 0) scontoAmt = Math.min(_prevSconto.valore, subtotale);
   const imponibile = subtotale - scontoAmt;
-  const ivaAmt = imponibile * iva / 100;
+  const ivaAmt = _prevIvaEsclusa ? 0 : imponibile * iva / 100;
   const totaleFinale = imponibile + ivaAmt;
   const cl = clienti.find(c => c.id === clienteId);
 
@@ -2383,6 +2401,7 @@ async function savePreventivo(id) {
     items: itemsPerSalvataggio,
     subtotale, scontoAmt, scontoTipo: _prevSconto.tipo, scontoValore: _prevSconto.valore,
     imponibile, ivaAmt, totaleFinale, ivaPerc: iva,
+    ivaEsclusa: _prevIvaEsclusa,
     updatedAt: firebase.firestore.FieldValue.serverTimestamp()
   };
 
@@ -2758,7 +2777,7 @@ async function generatePDF(prevId) {
 
   const scontoAmt = prev.scontoAmt || 0;
   const imponibile = subtot - scontoAmt;
-  const ivaAmt = imponibile * (prev.ivaPerc||22) / 100;
+  const ivaAmt = prev.ivaEsclusa ? 0 : imponibile * (prev.ivaPerc||22) / 100;
   const totale = imponibile + ivaAmt;
 
   const totLabelX = W - M - 65;
@@ -2776,12 +2795,14 @@ async function generatePDF(prevId) {
     doc.text(sLab, totLabelX, y+12); doc.text('- '+fmt(scontoAmt), totValX, y+12, {align:'right'});
     doc.setTextColor(60,60,60);
     doc.text('Imponibile:', totLabelX, y+18); doc.text(fmt(imponibile), totValX, y+18, {align:'right'});
-    doc.text(`IVA ${prev.ivaPerc||22}%:`, totLabelX, y+24); doc.text(fmt(ivaAmt), totValX, y+24, {align:'right'});
+    if (!prev.ivaEsclusa) { doc.text(`IVA ${prev.ivaPerc||22}%:`, totLabelX, y+24); doc.text(fmt(ivaAmt), totValX, y+24, {align:'right'}); }
+    else { doc.setTextColor(150,150,150); doc.text(`IVA ${prev.ivaPerc||22}% (esclusa):`, totLabelX, y+24); doc.text('—', totValX, y+24, {align:'right'}); doc.setTextColor(60,60,60); }
     y += 28;
   } else {
     doc.setFont('helvetica','normal'); doc.setFontSize(8.5); doc.setTextColor(60,60,60);
     doc.text('Imponibile:', totLabelX, y+6); doc.text(fmt(imponibile), totValX, y+6, {align:'right'});
-    doc.text(`IVA ${prev.ivaPerc||22}%:`, totLabelX, y+12); doc.text(fmt(ivaAmt), totValX, y+12, {align:'right'});
+    if (!prev.ivaEsclusa) { doc.text(`IVA ${prev.ivaPerc||22}%:`, totLabelX, y+12); doc.text(fmt(ivaAmt), totValX, y+12, {align:'right'}); }
+    else { doc.setTextColor(150,150,150); doc.text(`IVA ${prev.ivaPerc||22}% (esclusa):`, totLabelX, y+12); doc.text('—', totValX, y+12, {align:'right'}); doc.setTextColor(60,60,60); }
     y += 16;
   }
 
